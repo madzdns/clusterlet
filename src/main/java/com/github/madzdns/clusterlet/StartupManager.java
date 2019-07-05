@@ -7,10 +7,10 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.frfra.frsynch.codec.ClusterMessage;
-import com.frfra.frsynch.codec.IMessage;
-import com.frfra.frsynch.codec.SynchMessage;
-import com.frfra.frsynch.codec.SynchMessage.SynchMode;
+import com.github.madzdns.clusterlet.codec.ClusterMessage;
+import com.github.madzdns.clusterlet.codec.IMessage;
+import com.github.madzdns.clusterlet.codec.SynchMessage;
+import com.github.madzdns.clusterlet.codec.SynchMessage.SynchMode;
 
 public class StartupManager {
 

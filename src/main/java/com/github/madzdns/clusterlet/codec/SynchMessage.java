@@ -13,7 +13,7 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.frfra.frsynch.SynchType;
+import com.github.madzdns.clusterlet.SynchType;
 
 public class SynchMessage implements ISynchMessage {
 

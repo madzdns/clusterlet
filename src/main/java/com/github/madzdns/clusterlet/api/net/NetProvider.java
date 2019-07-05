@@ -10,9 +10,9 @@ import org.apache.mina.filter.ssl.SslContextFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.frfra.frsynch.api.net.ssl.client.MinaClientSslContext;
-import com.frfra.frsynch.api.net.ssl.server.JavaSSLContext;
-import com.frfra.frsynch.api.net.ssl.server.MinaServerSslContext;
+import com.github.madzdns.clusterlet.api.net.ssl.client.MinaClientSslContext;
+import com.github.madzdns.clusterlet.api.net.ssl.server.JavaSSLContext;
+import com.github.madzdns.clusterlet.api.net.ssl.server.MinaServerSslContext;
 
 public class NetProvider {
 

@@ -14,7 +14,7 @@ import org.apache.mina.filter.codec.ProtocolDecoder;
 import org.apache.mina.filter.codec.ProtocolEncoder;
 import org.apache.mina.transport.socket.nio.NioSocketConnector;
 
-import com.frfra.frsynch.SynchSession.MinaConnectListener;
+import com.github.madzdns.clusterlet.SynchSession.MinaConnectListener;
 
 public class SynchSocket {
 	

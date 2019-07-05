@@ -2,7 +2,7 @@ package com.github.madzdns.clusterlet;
 
 import java.util.Set;
 
-import com.frfra.frsynch.codec.IMessage;
+import com.github.madzdns.clusterlet.codec.IMessage;
 
 public interface ISynchCallbak {
 

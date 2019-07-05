@@ -12,12 +12,12 @@ import org.apache.mina.filter.ssl.SslFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.frfra.frsynch.ClusterNode.ClusterAddress;
-import com.frfra.frsynch.api.net.NetProvider;
-import com.frfra.frsynch.api.net.compress.filter.MinaCompressionFilter;
-import com.frfra.frsynch.codec.SynchMessage;
-import com.frfra.frsynch.codec.mina.SynchMinaDecoder;
-import com.frfra.frsynch.codec.mina.SynchMinaEncoder;
+import com.github.madzdns.clusterlet.ClusterNode.ClusterAddress;
+import com.github.madzdns.clusterlet.api.net.NetProvider;
+import com.github.madzdns.clusterlet.api.net.compress.filter.MinaCompressionFilter;
+import com.github.madzdns.clusterlet.codec.SynchMessage;
+import com.github.madzdns.clusterlet.codec.mina.SynchMinaDecoder;
+import com.github.madzdns.clusterlet.codec.mina.SynchMinaEncoder;
 
 class SynchSession {
 	

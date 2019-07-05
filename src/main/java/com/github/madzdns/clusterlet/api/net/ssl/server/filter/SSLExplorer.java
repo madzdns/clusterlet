@@ -437,7 +437,7 @@ public final class SSLExplorer {
             int extType = getInt16(input);      // extenson clientBackend
             int extLen = getInt16(input);       // length of extension data
 
-            if (extType == 0x00) {      // 0x00: clientBackend of com.frfra.frsynch name indication
+            if (extType == 0x00) {      // 0x00: clientBackend of com.github.madzdns.clusterlet name indication
                 return exploreSNIExt(input, extLen);
             } else {                    // ignore other extensions
                 ignoreByteVector(input, extLen);
@@ -477,13 +477,13 @@ public final class SSLExplorer {
             int listLen = getInt16(input);     // length of server_name_list
             if (listLen == 0 || listLen + 2 != extLen) {
                 throw new SSLProtocolException(
-                    "Invalid com.frfra.frsynch name indication extension");
+                    "Invalid com.github.madzdns.clusterlet name indication extension");
             }
 
             remains -= 2;     // 0x02: the length field of server_name_list
             while (remains > 0) {
                 int code = getInt8(input);      // name_type
-                int snLen = getInt16(input);    // length field of com.frfra.frsynch name
+                int snLen = getInt16(input);    // length field of com.github.madzdns.clusterlet name
                 if (snLen > remains) {
                     throw new SSLProtocolException(
                         "Not enough data to fill declared vector size");
@@ -496,17 +496,17 @@ public final class SSLExplorer {
                     case StandardConstants.SNI_HOST_NAME:
                         if (encoded.length == 0) {
                             throw new SSLProtocolException(
-                                "Empty HostName in com.frfra.frsynch name indication");
+                                "Empty HostName in com.github.madzdns.clusterlet name indication");
                         }
                         serverName = new SNIHostName(encoded);
                         break;
                     default:
                         serverName = new UnknownServerName(code, encoded);
                 }
-                // check for duplicated com.frfra.frsynch name clientBackend
+                // check for duplicated com.github.madzdns.clusterlet name clientBackend
                 if (sniMap.put(serverName.getType(), serverName) != null) {
                     throw new SSLProtocolException(
-                            "Duplicated com.frfra.frsynch name of clientBackend " +
+                            "Duplicated com.github.madzdns.clusterlet name of clientBackend " +
                             serverName.getType());
                 }
 
@@ -515,12 +515,12 @@ public final class SSLExplorer {
             }
         } else if (extLen == 0) {     // "server_name" extension in ServerHello
             throw new SSLProtocolException(
-                        "Not com.frfra.frsynch name indication extension in client");
+                        "Not com.github.madzdns.clusterlet name indication extension in client");
         }
 
         if (remains != 0) {
             throw new SSLProtocolException(
-                        "Invalid com.frfra.frsynch name indication extension");
+                        "Invalid com.github.madzdns.clusterlet name indication extension");
         }
 
         return Collections.<SNIServerName>unmodifiableList(

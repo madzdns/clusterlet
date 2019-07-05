@@ -12,8 +12,8 @@ import org.apache.mina.filter.codec.ProtocolEncoderOutput;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.frfra.frsynch.codec.SynchMessage;
-import com.frfra.frsynch.helper.Types;
+import com.github.madzdns.clusterlet.codec.SynchMessage;
+import com.github.madzdns.clusterlet.helper.Types;
 
 public class SynchMinaEncoder implements ProtocolEncoder {
 	

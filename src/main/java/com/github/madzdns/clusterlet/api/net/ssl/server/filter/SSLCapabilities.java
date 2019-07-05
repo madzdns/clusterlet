@@ -38,7 +38,7 @@ import javax.net.ssl.SNIServerName;
  * Encapsulates the security capabilities of an SSL/TLS connection.
  * <P>
  * The security capabilities are the list of ciphersuites to be accepted in
- * an SSL/TLS handshake, the record version, the hello version, and com.frfra.frsynch
+ * an SSL/TLS handshake, the record version, the hello version, and com.github.madzdns.clusterlet
  * name indication, etc., of an SSL/TLS connection.
  * <P>
  * <code>SSLCapabilities</code> can be retrieved by exploring the network
@@ -65,11 +65,11 @@ public abstract class SSLCapabilities {
 
     /**
      * Returns a <code>List</code> containing all {@link SNIServerName}s
-     * of the com.frfra.frsynch name indication.
+     * of the com.github.madzdns.clusterlet name indication.
      *
      * @return a non-null immutable list of {@link SNIServerName}s
-     *         of the com.frfra.frsynch name indication parameter, may be empty
-     *         if no com.frfra.frsynch name indication.
+     *         of the com.github.madzdns.clusterlet name indication parameter, may be empty
+     *         if no com.github.madzdns.clusterlet name indication.
      *
      * @see SNIServerName
      */

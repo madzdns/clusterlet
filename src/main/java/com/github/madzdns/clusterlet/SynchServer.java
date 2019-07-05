@@ -18,9 +18,9 @@ import org.apache.mina.transport.socket.nio.NioSocketAcceptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.frfra.frsynch.ClusterNode.ClusterAddress;
-import com.frfra.frsynch.config.Bind;
-import com.frfra.frsynch.config.Socket;
+import com.github.madzdns.clusterlet.ClusterNode.ClusterAddress;
+import com.github.madzdns.clusterlet.config.Bind;
+import com.github.madzdns.clusterlet.config.Socket;
 
 public class SynchServer {
 

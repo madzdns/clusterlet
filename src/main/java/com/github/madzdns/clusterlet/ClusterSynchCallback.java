@@ -8,9 +8,9 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.frfra.frsynch.codec.ClusterMessage;
-import com.frfra.frsynch.codec.IMessage;
-import com.frfra.frsynch.codec.SynchMessage;
+import com.github.madzdns.clusterlet.codec.ClusterMessage;
+import com.github.madzdns.clusterlet.codec.IMessage;
+import com.github.madzdns.clusterlet.codec.SynchMessage;
 
 public class ClusterSynchCallback implements ISynchCallbak {
 	

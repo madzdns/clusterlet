@@ -3,7 +3,7 @@ package com.github.madzdns.clusterlet;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.frfra.frsynch.codec.IMessage;
+import com.github.madzdns.clusterlet.codec.IMessage;
 
 public class SynchProtocolOutput implements ISynchProtocolOutput {
 
