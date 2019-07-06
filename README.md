@@ -47,5 +47,14 @@ final Set<Short> awareIds = null;//This new member is not aware of other nodes
 final byte state = Member.STATE_VLD;//To delete use Member.STATE_DEL
 Member member = new Member(memberId, syncAddresses, useSsl, authByKey, key, lastModified, awareIds, state);
 
-context.synchCluster(edge, SynchType.RING);
+context.synchCluster(member, SynchType.RING);
 ```
+
+### Synchronization types
+
+In above example, we've used the `SynchType.RING` type to synch the new member with the cluster.
+This parameter makes an special hint for the synchronization method.
+Different synchronization types are:
+
+1. `UNICAST` sends message to the specified members
+2. `UNICAST_BALANCE`  
