@@ -98,11 +98,9 @@ public class ClusterTest {
         SynchHandler handler = context.make()
                 .withCallBack(callbak1)
                 .withEncoder(MyMessage.class);
-        Bind backendBinding = new Bind();
-        backendBinding.setSockets(Collections.singletonList(new Socket("localhost:12345")));
         Bind syncBinding = new Bind();
         syncBinding.setSockets(Collections.singletonList(new Socket("localhost:12346")));
-        new SynchServer(handler,syncBinding,backendBinding).start();*/
+        new SynchServer(handler,syncBinding).start();*/
 
         ClusterSnapshot cs = context.getSnapshot();
         assertNotNull(cs.getCluster());

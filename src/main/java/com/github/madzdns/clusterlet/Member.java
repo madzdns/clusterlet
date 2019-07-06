@@ -103,7 +103,6 @@ public class Member implements INode, Externalizable {
                   final long lastModified,
                   final Set<Short> awareIds,
                   final byte state) {
-
         this.id = id;
         this.synchAddresses = synchAddresses;
         this.useSsl = useSsl;
