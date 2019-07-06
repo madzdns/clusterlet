@@ -46,19 +46,16 @@ public class StartupManager {
 		
 		List<IMessage> messages = new ArrayList<IMessage>();
 		
-		for(Iterator<ClusterNode> it = snapshot.cluster.iterator(); it.hasNext();) {
+		for(Iterator<Member> it = snapshot.cluster.iterator(); it.hasNext();) {
 			
-			ClusterNode node = it.next();
+			Member node = it.next();
 
 			msg = new ClusterMessage(node.getId(),
 					node.isUseSsl(),node.isAuthByKey(),node.getKey(),
 					node.getLastModified(),
-					node.getSynchAddresses(),node.getBackendAddresses(),
+					node.getSynchAddresses(),
 					node.isValid()?SynchMessage.COMMAND_TAKE_THis
-							:SynchMessage.COMMAND_DEL_THis,node.getMonitorDelay(),
-							node.getMonitorInterval(),node.getReportDelay(),
-							node.getReportInterval());
-			
+							:SynchMessage.COMMAND_DEL_THis);
 			messages.add(msg);
 		}
 		
@@ -66,11 +63,8 @@ public class StartupManager {
 				.withCallBack(new ClusterSynchCallback(synchContext))
 				.withEncoder(null)
 				.withoutCluster(synchContext.myId);
-		
 		handler.mode = SynchMode.SYNCH_CLUSTER;
-		
 		feature = handler.synch(messages).get();
-
 		return !synchContext.inStartup;
 	}
 }

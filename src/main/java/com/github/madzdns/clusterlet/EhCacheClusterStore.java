@@ -12,14 +12,14 @@ public class EhCacheClusterStore extends EhCacheStore implements IClusterStore {
 	}
 	
 	@Override
-	public void update(ClusterNode node) {
+	public void update(Member node) {
 		
 		Element e = new Element(node.getId(), node);
 		cache.put(e);
 	}
 	
 	@Override
-	public ClusterNode get(Short id) {
+	public Member get(Short id) {
 		
 		Element e = cache.get(id);
 		
@@ -28,7 +28,7 @@ public class EhCacheClusterStore extends EhCacheStore implements IClusterStore {
 			return null;
 		}
 		
-		return (ClusterNode) e.getObjectValue();
+		return (Member) e.getObjectValue();
 	}
 	
 	@Override
@@ -46,9 +46,9 @@ public class EhCacheClusterStore extends EhCacheStore implements IClusterStore {
 			
 			if(e != null) {
 				
-				if(e.getObjectValue() instanceof ClusterNode) {
+				if(e.getObjectValue() instanceof Member) {
 				
-					callbak.next((ClusterNode)e.getObjectValue());
+					callbak.next((Member)e.getObjectValue());
 				}
 			}
 		}

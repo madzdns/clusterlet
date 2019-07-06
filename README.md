@@ -1,4 +1,4 @@
-## What is Clusterlet?
+# What is Clusterlet?
 
 Clusterlet is a `Java` library to let you manage A to Z of a `cluster`
 
@@ -11,3 +11,12 @@ It keeps track of messages and is capable of resolving conflicts between message
 It also gives reports related to the state and health of the cluster.
 
 [MadzDNS cluster](https://github.com/madzdns/cluster) is a proof of concept for this library
+
+## Examples
+
+### Adding a new member
+
+```java
+final short id = 1;
+Member member = new Member(); 
+```

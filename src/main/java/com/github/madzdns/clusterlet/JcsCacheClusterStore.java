@@ -27,7 +27,7 @@ public class JcsCacheClusterStore extends JcsCacheStore implements
 	}
 
 	@Override
-	public void update(ClusterNode node) {
+	public void update(Member node) {
 
 		ICacheElement<Serializable, Serializable> element = new CacheElement<Serializable, Serializable>(CACHE_NAME, node.getId(), node);
 		
@@ -42,13 +42,13 @@ public class JcsCacheClusterStore extends JcsCacheStore implements
 	}
 
 	@Override
-	public ClusterNode get(Short id) {
+	public Member get(Short id) {
 		
 		ICacheElement<Serializable, Serializable> element = cache.get(id);
 		
 		if(element != null) {
 			
-			return (ClusterNode) element.getVal();
+			return (Member) element.getVal();
 		}
 		
 		return null;
@@ -69,9 +69,9 @@ public class JcsCacheClusterStore extends JcsCacheStore implements
 			
 			if(e != null) {
 				
-				if(e.getVal() instanceof ClusterNode) {
+				if(e.getVal() instanceof Member) {
 				
-					callbak.next((ClusterNode)e.getVal());
+					callbak.next((Member)e.getVal());
 				}
 			}
 		}

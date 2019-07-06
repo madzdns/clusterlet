@@ -14,27 +14,27 @@ public class ClusterSnapshot {
 	
 	Set<Short> inValidClusterIDs = null;
 	
-	List<ClusterNode> validCluster = null;
+	List<Member> validCluster = null;
 	
-	List<ClusterNode> aliveCluster = null;
+	List<Member> aliveCluster = null;
 	
-	List<ClusterNode> cluster = null;
+	List<Member> cluster = null;
 	
-	Map<Short, ClusterNode> idClusterMap = null;
+	Map<Short, Member> idClusterMap = null;
 	
 	public ClusterSnapshot() {
 		
-		validCluster = new ArrayList<ClusterNode>();
+		validCluster = new ArrayList<Member>();
 		
-		aliveCluster = new ArrayList<ClusterNode>();
+		aliveCluster = new ArrayList<Member>();
 		
-		cluster = new ArrayList<ClusterNode>();
+		cluster = new ArrayList<Member>();
 		
 		validClusterIDs = new HashSet<Short>();
 		
 		inValidClusterIDs = new HashSet<Short>();
 		
-		idClusterMap = new HashMap<Short, ClusterNode>();
+		idClusterMap = new HashMap<Short, Member>();
 	}
 
 	/**
@@ -65,7 +65,7 @@ public class ClusterSnapshot {
 	 * and not marked as down
 	 * @return
 	 */
-	public List<ClusterNode> getValidCluster() {
+	public List<Member> getValidCluster() {
 		
 		return validCluster;
 	}
@@ -76,14 +76,14 @@ public class ClusterSnapshot {
 	 * as down. So a deleted edge can still be alive
 	 * @return
 	 */
-	public List<ClusterNode> getAliveCluster() {
+	public List<Member> getAliveCluster() {
 		
 		return aliveCluster;
 	}
 	
-	public ClusterNode getById(short id, int check) {
+	public Member getById(short id, int check) {
 		
-		ClusterNode e = idClusterMap.get(id);
+		Member e = idClusterMap.get(id);
 		
 		if(e == null) {
 			
@@ -124,7 +124,7 @@ public class ClusterSnapshot {
 		
 	}
 
-	public List<ClusterNode> getCluster() {
+	public List<Member> getCluster() {
 		
 		return cluster;
 	}

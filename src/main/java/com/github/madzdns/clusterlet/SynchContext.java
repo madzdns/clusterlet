@@ -1,20 +1,14 @@
 package com.github.madzdns.clusterlet;
 
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.github.madzdns.clusterlet.codec.ClusterMessage;
 import com.github.madzdns.clusterlet.codec.IMessage;
 import com.github.madzdns.clusterlet.codec.SynchMessage;
 import com.github.madzdns.clusterlet.codec.SynchMessage.SynchMode;
 import com.github.madzdns.clusterlet.config.SynchConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.*;
 
 public class SynchContext {
 
@@ -38,7 +32,6 @@ public class SynchContext {
      * @param config @see SynchConfig
      */
     public SynchContext(short myId, SynchConfig config) throws Exception {
-
         this.myId = myId;
         this.config = config;
 			/*System.setProperty("net.sf.ehcache.enableShutdownHook","true");
@@ -46,17 +39,14 @@ public class SynchContext {
 			messageStore = new EhCacheMessageStore(config.getClusterStorageConfigPath());*/
         clusterStore = new JcsCacheClusterStore(config.getClusterStorageConfigPath());
         messageStore = new JcsCacheMessageStore(config.getClusterStorageConfigPath());
-        ClusterNode node = getFrNodeById(myId);
+        Member node = getFrNodeById(myId);
         if (node == null) {
             final Set<Short> awareIds = new HashSet<Short>();
-            node = new ClusterNode(myId, null, null,
-                    true, true, "", new Date().getTime(),
-                    awareIds, ClusterNode.STATE_VLD,
-                    ClusterNode.MONITOR_DELAY,
-                    ClusterNode.MONITOR_INTERVAL,
-                    ClusterNode.REPORT_DELAY,
-                    ClusterNode.REPORT_INTERVAL);
-            updateFrNode(node);
+            node = new Member(myId, null,
+                    true, true, "",
+                    new Date().getTime(),
+                    awareIds, Member.STATE_VLD);
+            updateMember(node);
         }
     }
 
@@ -81,56 +71,42 @@ public class SynchContext {
      * @return a client instance of @see SynchHandler
      */
     public SynchHandler make(SynchType type) {
-
         SynchHandler s = new SynchHandler(this, type);
         inStartup = false;
         return s;
     }
 
     Set<Short> getAwareNodes(String key, long version) {
-
         return messageStore.getAwareNodes(key, version);
     }
 
     void addAwareNodes(String key, long version, Set<Short> awareNodes) {
-
         messageStore.updateAwareNodes(key, version, awareNodes);
     }
 
-    public ClusterNode getFrNodeById(short id) {
-
+    public Member getFrNodeById(short id) {
         return clusterStore.get(id);
     }
 
-    void updateFrNode(ClusterNode node) {
-
-        if (node == null)
-
+    void updateMember(Member node) {
+        if (node == null) {
             return;
-
+        }
         node.addAwareId(myId);
-
         /*
          * Check if received edge is aware of himself (the target edge received this update before).
          * If not, we should use its previous key chain to inform him
          */
         if (!node.getAwareIds().contains(node.getId())) {
-
-            ClusterNode e = null;
-
+            Member e = null;
             e = clusterStore.get(node.getId());
-
             if (e != null) {
-
                 if (!e.getKey().equals(node.getKey())) {
-
                     node.addKeyChain(e.getKeyChain());
                 }
             }
         }
-
         virtualLastModified = new Date().getTime();
-
         clusterStore.update(node);
         invalidateMonitor();
     }
@@ -141,11 +117,10 @@ public class SynchContext {
      * It makes Frsynch to use default synch type to synchronise
      * node
      *
-     * @param node of type @see ClusterNode
+     * @param node of type @see Member
      * @return true if it was synched with cluster
      */
-    public boolean synchCluster(ClusterNode node) {
-
+    public boolean synchCluster(Member node) {
         return synchCluster(node, SynchType.UNICAST_BALANCE);
     }
 
@@ -155,69 +130,43 @@ public class SynchContext {
      * Using withType you can force Frsynch a specified type to use
      * as synchronising method
      *
-     * @param node     node of type @see ClusterNode
+     * @param node     node of type @see Member
      * @param withType of type @SynchType
      * @return true if it was synched with cluster
      */
-    public boolean synchCluster(ClusterNode node, SynchType withType) {
-
+    public boolean synchCluster(Member node, SynchType withType) {
         if (node == null) {
-
             return false;
         }
-
-        updateFrNode(node);
-
+        updateMember(node);
         SynchHandler handler = make(withType)
                 .withoutCluster(myId)
                 .withCallBack(new ClusterSynchCallback(this));
         handler.mode = SynchMode.SYNCH_CLUSTER;
-
         final List<IMessage> messages = new ArrayList<IMessage>();
-
         ClusterSnapshot snapshot = getSnapshot();
-
         if (snapshot != null) {
-
-            for (Iterator<ClusterNode> it = snapshot.cluster.iterator(); it.hasNext(); ) {
-
-                ClusterNode n = it.next();
-
+            for (Member n : snapshot.cluster) {
                 ClusterMessage msg = new ClusterMessage(n.getId(),
                         n.isUseSsl(), n.isAuthByKey(), n.getKey(),
                         n.getLastModified(), n.getSynchAddresses(),
-                        n.getBackendAddresses(),
                         n.isValid() ? SynchMessage.COMMAND_TAKE_THis :
-                                SynchMessage.COMMAND_DEL_THis,
-                        n.getMonitorDelay(),
-                        n.getMonitorInterval(),
-                        n.getReportDelay(),
-                        n.getReportInterval());
-
+                                SynchMessage.COMMAND_DEL_THis);
                 messages.add(msg);
             }
         }
-
         SynchFeature feature = handler.synch(messages).get();
-
         if (feature == null) {
-
             if (node.getId() == myId) {
-
-
                 inStartup = false;
                 return true;
             }
-
             return false;
         }
-
         if (feature.get(String.valueOf(node.getId())).isSuccessful()) {
-
             inStartup = false;
             return true;
         }
-
         return false;
     }
 
@@ -267,7 +216,7 @@ public class SynchContext {
         clusterStore.iterator(new IClusterStoreIteratorCallback() {
 
             @Override
-            public void next(ClusterNode node) {
+            public void next(Member node) {
 
                 if (node.isValid()) {
 
@@ -317,7 +266,7 @@ public class SynchContext {
         snapshot = null;
     }
 
-    void synchronizedStateChange(ClusterNode node, byte state) {
+    void synchronizedStateChange(Member node, byte state) {
 
         node.setState(state);
         invalidateMonitor();
@@ -325,9 +274,9 @@ public class SynchContext {
     }
 
     /**
-     * @return a @see ClusterNode of local node
+     * @return a @see Member of local node
      */
-    public ClusterNode getMyInfo() {
+    public Member getMyInfo() {
 
         return clusterStore.get(myId);
     }
@@ -343,7 +292,7 @@ public class SynchContext {
      */
     public boolean resetFrNodeKeyById(short id, String key) {
 
-        ClusterNode node = getFrNodeById(id);
+        Member node = getFrNodeById(id);
 
         if (node != null && key != null) {
 
