@@ -10,4 +10,4 @@ It keeps track of messages and is capable of resolving conflicts between message
 
 It also gives reports related to the state and health of the cluster.
 
-[MadzDNS](https://github.com/madzdns/cluster) is a proof of concept for this library
+[MadzDNS cluster](https://github.com/madzdns/cluster) is a proof of concept for this library
