@@ -23,7 +23,7 @@ final String KEYSTORE_PASSWORD = null;
 final String TRUSTSTORE_PASSWORD = null;
 final String KEYSTORE_PASSWORD_2ND = null;
 final String CERTIFICATE_PATH = null;
-final short MY_OWN_ID = 1;//Id of this node
+final short MY_OWN_ID = 1;//Id of this member
 final String clusterFile = "cluster_file";
 new File(clusterFile).createNewFile();
 SynchConfig config = new SynchConfig(clusterFile,

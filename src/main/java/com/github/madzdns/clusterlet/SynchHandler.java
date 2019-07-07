@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.*;
 import java.util.Map.Entry;
+import java.util.function.Consumer;
 
 import javax.net.ssl.SSLContext;
 
@@ -169,6 +170,19 @@ public class SynchHandler extends IoHandlerAdapter {
         );
     }
 
+    private void doInverseIds(List<Member> cluster, Set<Short> idss, Consumer<Member> consumer) {
+        Set<Short> idSet = new HashSet<>();
+        for (short id : ids) {
+            idSet.add(id);
+        }
+        cluster.stream().filter(member -> !idSet.contains(member.getId())).forEach(
+                member -> {
+                    idss.add(member.getId());
+                    consumer.accept(member);
+                }
+        );
+    }
+
     /**
      * Starts to synch batch of messages with cluster. This method should be called
      * after you specified callback and encoder and destinations.
@@ -315,7 +329,7 @@ public class SynchHandler extends IoHandlerAdapter {
         Set<Short> awareIds;
         awareIds = synchContext.getAwareNodes(m.getKey(), m.getVersion());
         if (awareIds == null || awareIds.size() == 0) {
-            awareIds = new HashSet<Short>();
+            awareIds = new HashSet<>();
             awareIds.add(synchContext.myId);
             synchContext.addAwareNodes(m.getKey(), m.getVersion(), awareIds);
         }
@@ -907,7 +921,7 @@ public class SynchHandler extends IoHandlerAdapter {
             workCallback(synch, STATE_UNPROPER, link);
             return;
         } else if (msg.getType() == SynchMessage.TYPE_BAD_KEY) {
-            log.warn("Got BAD_KEY synch responce from {} my key chain of him was:{}", peer, synch.getFrNode().getKeyChain());
+            log.warn("Got BAD_KEY synch responce from {} my key chain of him was:{}", peer, synch.getMember().getKeyChain());
             workCallback(synch, STATE_UNPROPER, link);
             session.setAttribute("planned_close");
             session.close(false);
@@ -979,60 +993,20 @@ public class SynchHandler extends IoHandlerAdapter {
                 List<IMessage> responses = out.getMessages();
 
                 if (!result) {
-
                     if (isRing) {
-
                         faildContents.put(sc.getKey(), this.synchContents.get(sc.getKey()));
                     }
-
                     if (responses != null) {
-
-                        for (Iterator<IMessage> respIt = responses.iterator(); respIt.hasNext(); ) {
-
-                            IMessage response = respIt.next();
-
+                        for (IMessage response : responses) {
                             if (response != null) {
-
                                 Set<Short> awareNodes = synchContext.getAwareNodes(response.getKey(), response.getVersion());
-
                                 responseContents.add(new SynchContent(response.getKey(), response.getVersion(),
                                         awareNodes, response.serialize()));
                             }
                         }
                     } else {
-
-                        HashSet<Short> iFaild = new HashSet<Short>();
-                        iFaild.add(me.getId());
-
-                        Set<Short> awareNodes = msg.getExpectedIds();
-                        SynchResult sr = synchFeature.get(sc.getKey());
-                        if (isRing && awareNodes != null) {
-
-                            short nodeId = 0;
-
-                            for (int i = 0; i < ids.length; i++) {
-
-                                nodeId = ids[i];
-
-                                if (awareNodes.contains(nodeId)) {
-
-                                    sr.addFailedMember(nodeId);
-                                    sr.removeSynchedMember(nodeId);
-                                }
-                            }
-                        } else {
-
-                            sr.addFailedMember(msg.getId());
-                            sr.removeSynchedMember(msg.getId());
-                        }
-
-                        numberOfNull++;
-
-                        responseContents.add(new SynchContent(sc.getKey(),
-                                0/*sc.getVersion()*/,
-                                iFaild, null));
+                        numberOfNull = handleResponseContentsForNullResponses(msg, isRing, responseContents, numberOfNull, sc);
                     }
-
 						/*
 						 * I think it is not right to do this here
 						 * if(response == null) {
@@ -1040,71 +1014,16 @@ public class SynchHandler extends IoHandlerAdapter {
 							synchFeature.get(sc.getKey()).addFailedMember(msg.getId());
 						}*/
                 } else {
-
                     Set<Short> awareNodes = sc.getAwareIds();
-
                     if (awareNodes == null) {
-
-                        awareNodes = new HashSet<Short>();
+                        awareNodes = new HashSet<>();
                     }
-
                     awareNodes.add(me.getId());
                     awareNodes.add(msg.getId());
-
                     if (sc.getVersion() > 0 && sc.getKey() != null && !sc.getKey().equals("")) {
-
                         synchContext.addAwareNodes(sc.getKey(), sc.getVersion(), awareNodes);
                     }
-
-                    SynchResult r = synchFeature.get(sc.getKey());
-
-                    if (r != null) {
-
-                        Set<Short> expectedIds = msg.getExpectedIds();
-
-                        if (isRing && expectedIds != null) {
-
-                            expectedIds.addAll(awareNodes);
-
-                            short nodeId = 0;
-
-                            for (int i = 0; i < ids.length; i++) {
-
-                                nodeId = ids[i];
-
-                                if (expectedIds.contains(nodeId)) {
-
-                                    r.removeFailedMember(nodeId);
-                                    r.addSynchedMember(nodeId);
-                                }
-                            }
-                        } else {
-
-                            short nodeId = 0;
-
-                            for (int i = 0; i < ids.length; i++) {
-
-                                nodeId = ids[i];
-
-                                if (awareNodes.contains(nodeId)) {
-
-                                    r.removeFailedMember(nodeId);
-                                    r.addSynchedMember(nodeId);
-                                }
-                            }
-                        }
-                    }
-
-                    if (this.expectedNodes != null &&
-                            this.expectedNodes.size() > 0) {
-
-                        SynchContent scc = this.synchContents.get(sc.getKey());
-
-                        if (scc != null) {
-
-                            scc.addAwareId(sc.getAwareIds());
-                        }
-                    }
+                    syncResultHandleStarter2(msg, isRing, sc, awareNodes);
 
                     if (responses != null) {
 
@@ -1254,180 +1173,72 @@ public class SynchHandler extends IoHandlerAdapter {
                 }
 
                 ClusterMessage decoded = new ClusterMessage();
-
-                decoded.deserialize(m);
-
                 SynchProtocolOutput out = new SynchProtocolOutput();
-
-                boolean result = clusterCallback.callBack(new MinaToISession(session), decoded, sc.getAwareIds(), out);
-
+                boolean result = decodeGetCallbackResult(session, decoded, m, sc.getAwareIds(), out);
                 List<IMessage> responses = out.getMessages();
 
                 if (!result) {
-
                     if (isRing) {
-
                         faildContents.put(sc.getKey(), this.synchContents.get(sc.getKey()));
                     }
-
                     if (responses != null) {
                         for (IMessage respons : responses) {
                             ClusterMessage response = (ClusterMessage) respons;
                             fillSyncContents(response, sc, responseContents);
                         }
                     } else {
-
-                        HashSet<Short> iFaild = new HashSet<Short>();
-                        iFaild.add(me.getId());
-
-                        Set<Short> awareNodes = msg.getExpectedIds();
-                        SynchResult sr = synchFeature.get(sc.getKey());
-                        if (isRing && awareNodes != null) {
-
-                            short nodeId = 0;
-
-                            for (int i = 0; i < ids.length; i++) {
-
-                                nodeId = ids[i];
-
-                                if (awareNodes.contains(nodeId)) {
-
-                                    sr.addFailedMember(nodeId);
-                                    sr.removeSynchedMember(nodeId);
-                                }
-                            }
-                        } else {
-
-                            sr.addFailedMember(msg.getId());
-                            sr.removeSynchedMember(msg.getId());
-                        }
-
-                        numberOfNull++;
-
-                        responseContents.add(new SynchContent(sc.getKey(),
-                                0/*sc.getVersion()*/,
-                                iFaild, null));
+                        numberOfNull = handleResponseContentsForNullResponses(msg, isRing, responseContents, numberOfNull, sc);
                     }
+                    /*
+                     * I think it is not right to do this here
+                     * if(response == null) {
 
-						/*
-						 * I think it is not right to do this here
-						 * if(response == null) {
-
-							synchFeature.get(sc.getKey()).addFailedMember(msg.getId());
-						}*/
+                        synchFeature.get(sc.getKey()).addFailedMember(msg.getId());
+                    }*/
                 } else {
-
                     Member node = synchContext.getMemberById(decoded.getId());
-
                     Set<Short> awareIds = sc.getAwareIds();
-
                     if (node != null) {
-
                         awareIds = node.getAwareIds();
                     } else {
-
                         log.warn("how come node is null!!");
                     }
-
                     Set<Short> awareNodes = awareIds;
-
-                    SynchResult r = synchFeature.get(sc.getKey());
-
-                    if (r != null) {
-
-                        Set<Short> expectedIds = msg.getExpectedIds();
-
-                        if (isRing && expectedIds != null) {
-
-                            expectedIds.addAll(awareNodes);
-
-                            short nodeId = 0;
-
-                            for (int i = 0; i < ids.length; i++) {
-
-                                nodeId = ids[i];
-
-                                if (expectedIds.contains(nodeId)) {
-
-                                    r.removeFailedMember(nodeId);
-                                    r.addSynchedMember(nodeId);
-                                }
-                            }
-                        } else {
-
-                            short nodeId = 0;
-
-                            for (int i = 0; i < ids.length; i++) {
-
-                                nodeId = ids[i];
-
-                                if (awareNodes.contains(nodeId)) {
-
-                                    r.removeFailedMember(nodeId);
-                                    r.addSynchedMember(nodeId);
-                                }
-                            }
-                        }
-                    }
-
-                    if (this.expectedNodes != null &&
-                            this.expectedNodes.size() > 0) {
-
-                        SynchContent scc = this.synchContents.get(sc.getKey());
-
-                        if (scc != null) {
-
-                            scc.addAwareId(sc.getAwareIds());
-                        }
-                    }
-
+                    syncResultHandleStarter2(msg, isRing, sc, awareNodes);
                     if (responses != null) {
-
-                        for (Iterator<IMessage> respIt = responses.iterator(); respIt.hasNext(); ) {
-
-                            ClusterMessage response = (ClusterMessage) respIt.next();
-
+                        for (IMessage respons : responses) {
+                            ClusterMessage response = (ClusterMessage) respons;
                             node = synchContext.getMemberById(response.getId());
-
                             awareIds = null;
-
                             if (node != null) {
-
                                 awareIds = node.getAwareIds();
                             }
-
                             responseContents.add(new SynchContent(sc.getKey(), response.getVersion(),
                                     awareIds, response.serialize()));
                         }
                     }
-						/*else {
+                    /*else {
 
-							responseContents.add(new SynchContent(sc.getKey(),
-									sc.getVersion(),
-									awareIds, null));
+                        responseContents.add(new SynchContent(sc.getKey(),
+                                sc.getVersion(),
+                                awareIds, null));
 
-							numberOfTrueResultsWithoutContents ++;
-						}*/
+                        numberOfTrueResultsWithoutContents ++;
+                    }*/
                 }
             }
 
             if (isRing) {
-
                 if (this.expectedNodes.size() == 0) {
-
                     this.synchContents = faildContents;
                 }
             }
 
             int responcesSize = responseContents.size();
-
             log.debug("responcesSize = {}, numberOfNull = {}", responcesSize, numberOfNull);
-
             if (responcesSize == 0 || numberOfNull == responcesSize) {
-
                 numberOfTrieds++;
                 createResult();
-
                 session.setAttribute("planned_close");
                 session.close(false);
                 return;
@@ -1437,22 +1248,72 @@ public class SynchHandler extends IoHandlerAdapter {
              * This way, an edge will accept zone synchronizations from an unknown Edge.
              * But because originator brought a valid key, I think this is OK
              * response.setKeyChain(him.getKeyChain());*/
-
-            SynchMessage m = new SynchMessage();
-            m.setId(me.getId());
-            m.setSynchMode(SynchMode.SYNCH_CLUSTER);
-            m.setSynchType(this.synch);
-            m.setType(SynchMessage.TYPE_CHECK);
+            SynchMessage m = createCompleteResponse(SynchMessage.TYPE_CHECK, null, SynchMode.SYNCH_CLUSTER, this.synch, (byte) (msg.getSequence() + 1));
             m.setContents(responseContents);
-            m.setSequence((byte) (msg.getSequence() + 1));
-
             session.write(m);
-
             if (log.isDebugEnabled()) {
-
                 log.debug("message responded {}, type {}, sequence {}", responseContents, m.getType(), m.getSequence());
             }
         }
+    }
+
+    private void syncResultHandleStarter2(SynchMessage msg, boolean isRing, SynchContent sc, Set<Short> awareNodes) {
+        SynchResult r = synchFeature.get(sc.getKey());
+        if (r != null) {
+            Set<Short> expectedIds = msg.getExpectedIds();
+            short memberId = 0;
+            if (isRing && expectedIds != null) {
+                expectedIds.addAll(awareNodes);
+                for (int i = 0; i < ids.length; i++) {
+                    memberId = ids[i];
+                    if (expectedIds.contains(memberId)) {
+                        r.removeFailedMember(memberId);
+                        r.addSynchedMember(memberId);
+                    }
+                }
+            } else {
+                for (int i = 0; i < ids.length; i++) {
+                    memberId = ids[i];
+                    if (awareNodes.contains(memberId)) {
+                        r.removeFailedMember(memberId);
+                        r.addSynchedMember(memberId);
+                    }
+                }
+            }
+        }
+
+        if (this.expectedNodes != null &&
+                this.expectedNodes.size() > 0) {
+            SynchContent scc = this.synchContents.get(sc.getKey());
+            if (scc != null) {
+                scc.addAwareId(sc.getAwareIds());
+            }
+        }
+    }
+
+    private int handleResponseContentsForNullResponses(SynchMessage msg, boolean isRing, Set<SynchContent> responseContents, int numberOfNull, SynchContent sc) {
+        HashSet<Short> iFaild = new HashSet<Short>();
+        iFaild.add(me.getId());
+        Set<Short> awareNodes = msg.getExpectedIds();
+        SynchResult sr = synchFeature.get(sc.getKey());
+        if (isRing && awareNodes != null) {
+            short nodeId = 0;
+            for (int i = 0; i < ids.length; i++) {
+                nodeId = ids[i];
+                if (awareNodes.contains(nodeId)) {
+                    sr.addFailedMember(nodeId);
+                    sr.removeSynchedMember(nodeId);
+                }
+            }
+        } else {
+            sr.addFailedMember(msg.getId());
+            sr.removeSynchedMember(msg.getId());
+        }
+        numberOfNull++;
+        responseContents.add(new SynchContent(sc.getKey(),
+                0/*sc.getVersion()*/,
+                iFaild, null));
+        return numberOfNull;
     }
 
     private void handleNullDataOfStarterHandler(SynchMessage msg, boolean isRing, Map<String, SynchContent> faildContents, SynchContent sc, Set<Short> awareMembers, SynchResult sr) {
@@ -1532,11 +1393,10 @@ public class SynchHandler extends IoHandlerAdapter {
 				return;
 			}
 		}*/
-
         if (!starter) {
             handleNoneStarter(session, msg, peer);
         } else {
-
+            handleStarter(session, msg, peer);
         }
     }
 
@@ -1545,35 +1405,28 @@ public class SynchHandler extends IoHandlerAdapter {
             throws Exception {
 
         if (cause instanceof IOException) {
-
             log.error("{} by {}", cause.getMessage(), ((InetSocketAddress) session.getRemoteAddress())
                     .getAddress().getHostAddress());
             return;
         } else {
-
             log.error("", cause);
         }
 
         if (starter) {
-
             InetSocketAddress peer = ((InetSocketAddress) session.getRemoteAddress());
             String link =
                     new StringBuilder(peer.getAddress()
                             .getHostAddress())
                             .append(":")
                             .append(peer.getPort()).toString();
-
-            SynchSession synch = (SynchSession) session.getAttribute("SynchSession");
-
-            workCallback(synch, STATE_WORK_FAILED, link);
+            SynchSession sync = (SynchSession) session.getAttribute("SynchSession");
+            workCallback(sync, STATE_WORK_FAILED, link);
         }
     }
 
     @Override
     public void sessionClosed(IoSession session) throws Exception {
-
         if (starter && !session.containsAttribute("planned_close")) {
-
             SynchSession synch = (SynchSession) session.getAttribute("SynchSession");
             log.debug("Session unexpectly closed. Starting close worker");
             workCallback(synch, STATE_UNPROPER, link);
@@ -1581,72 +1434,50 @@ public class SynchHandler extends IoHandlerAdapter {
     }
 
     public void workCallback(SynchSession session, byte state, String link_ip) {
-
         switch (synch) {
-
             case RING:
             case RING_QUERIOM:
             case RING_BALANCE:
             case RING_BALANCE_QUERIOM:
             case UNICAST_ONE_OF:
-
                 if (sessions == null) {
-
                     log.warn("Sessions had already been made null");
                     return;
                 }
 
                 if (state == STATE_WORK_FAILED ||
                         state == STATE_UNPROPER) {
-
-                    Member e = session.getFrNode();
-
+                    Member e = session.getMember();
                     if (e != null && e.getState() == Member.STATE_DEL) {
-
                         log.debug("Setting edge {} as DOWN", e.getId());
-
                         synchContext.synchronizedStateChange(e, Member.STATE_DWN);
-
                         unProperSockets.add(currentSocket);
-
                         if (synch != SynchType.UNICAST_ONE_OF) {
-
                             this.expectedNodes.remove(session.getFrNodeId());
                         }
                     }
                 }
 
                 if (state == STATE_WORK_FAILED) {
-
                     log.error("Last synch failed with edge {} due to failure of link {}. Trying other links"
                             , session.getFrNodeId(), link_ip);
-
                     try {
-
                         session.setupNextSocket();
-
                     } catch (Exception e1) {
                         log.error("", e1);
                     }
 
-
                     if (session.isAllTried()) {
-
                         if (synch != SynchType.UNICAST_ONE_OF) {
-
                             this.expectedNodes.remove(session.getFrNodeId());
                         }
-
                         numberOfTrieds++;
-                        addFaildNodeToSynchFeatures(session.getFrNode().getId());
+                        addFaildNodeToSynchFeatures(session.getMember().getId());
                     }
 
                     int last_socket = currentSocket;
-
                     currentSocket = (++currentSocket) % sessions.size();
-
                     log.warn("Using {}nd link of {} links", currentSocket, sessions.size());
-
                     while (sessions
                             .get(currentSocket)
                             .isAllTried()
@@ -1657,24 +1488,18 @@ public class SynchHandler extends IoHandlerAdapter {
                                     .get(currentSocket).getFrNodeId()))) {
 
                         if (currentSocket == last_socket) {
-
                             log.error("All linkes tried with no success. Synchnig failed");
-
                             //TODO I commented this in 14 APR 16
                             //synchContext.inStartup = false;
 
                             /*callbak.result(ids, false);*/
-
                             sessions = null;
-
                             /*
                              * In zone synchronizing, lastModified is always 0
                              * so this is safe to call
                              */
                             fixMonitorLastModified();
-
                             createResult();
-
                             return;
                         }
 
@@ -1689,39 +1514,25 @@ public class SynchHandler extends IoHandlerAdapter {
                     message.setType(SynchMessage.TYPE_CHECK);
                     message.setContents(this.synchContents.values());
 
-                    sessions
-                            .get(currentSocket)
+                    sessions.get(currentSocket)
                             .sendMsg(message);
 
                     return;
                 } else if (state == STATE_UNPROPER) {
-
-
                     synchronized (session.unproperMutx) {
-
                         if (session.isUnproper()) {
-
                             return;
                         }
-
                         session.setUnproper(true);
-
                         log.error("Last synch failed, due to struggle (or other hard errors) with edge {}. Trying other links", session.getFrNodeId());
-
                         unProperSockets.add(currentSocket);
-
                         if (synch != SynchType.UNICAST_ONE_OF) {
-
                             this.expectedNodes.remove(session.getFrNodeId());
                         }
-
                         numberOfTrieds++;
-                        addFaildNodeToSynchFeatures(session.getFrNode().getId());
-
+                        addFaildNodeToSynchFeatures(session.getMember().getId());
                         int last_socket = currentSocket;
-
                         currentSocket = (++currentSocket) % sessions.size();
-
                         while (sessions
                                 .get(currentSocket)
                                 .isAllTried()
@@ -1730,29 +1541,21 @@ public class SynchHandler extends IoHandlerAdapter {
                                 || (synch != SynchType.UNICAST_ONE_OF &&
                                 !this.expectedNodes.contains(sessions
                                         .get(currentSocket).getFrNodeId()))) {
-
                             if (currentSocket == last_socket) {
-
                                 log.error("All linkes tried with no success. Synchnig failed");
-
                                 //TODO I commented this in 14 APR 16
                                 //synchContext.inStartup = false;
 
                                 /*callbak.result(ids, false);*/
-
                                 sessions = null;
-
                                 /*
                                  * In zone synchronizing, lastModified is always 0
                                  * so this is safe to call
                                  */
                                 fixMonitorLastModified();
-
                                 createResult();
-
                                 return;
                             }
-
                             currentSocket = (++currentSocket) % sessions.size();
                         }
 
@@ -1764,10 +1567,8 @@ public class SynchHandler extends IoHandlerAdapter {
                         message.setType(SynchMessage.TYPE_CHECK);
                         message.setContents(this.synchContents.values());
 
-                        sessions
-                                .get(currentSocket)
+                        sessions.get(currentSocket)
                                 .sendMsg(message);
-
                         return;
                     }
                 }
@@ -1778,36 +1579,24 @@ public class SynchHandler extends IoHandlerAdapter {
             case UNICAST_QUERIOM:
             case UNICAST_BALANCE:
             case UNICAST_BALANCE_QUERIOM:
-
                 if (state == STATE_WORK_FAILED ||
                         state == STATE_UNPROPER) {
-
-                    Member e = session.getFrNode();
-
-                    if (e != null && e.getState() == Member.STATE_DEL) {
-
-                        log.warn("Setting edge {} as DOWN", e.getId());
-
-                        synchContext.synchronizedStateChange(e, Member.STATE_DWN);
-
+                    Member member = session.getMember();
+                    if (member != null && member.getState() == Member.STATE_DEL) {
+                        log.warn("Setting edge {} as DOWN", member.getId());
+                        synchContext.synchronizedStateChange(member, Member.STATE_DWN);
                         numberOfTrieds++;
-                        addFaildNodeToSynchFeatures(e.getId());
-
+                        addFaildNodeToSynchFeatures(member.getId());
                         break;
                     }
                 }
 
                 if (state == STATE_WORK_FAILED) {
-
                     log.error("Last synch failed with edge {} due to failure of link {}. Trying other links"
                             , session.getFrNodeId(), link_ip);
-
                     try {
-
                         session.setupNextSocket();
-
                         if (!session.isAllTried()) {
-
                             SynchMessage message = new SynchMessage();
                             message.setId(me.getId());
                             message.setInStartup(startupState);
@@ -1816,115 +1605,78 @@ public class SynchHandler extends IoHandlerAdapter {
                             message.setType(SynchMessage.TYPE_CHECK);
                             message.setContents(this.synchContents.values());
                             session.sendMsg(message);
-
                             return;
                         } else {
-
                             numberOfTrieds++;
-                            addFaildNodeToSynchFeatures(session.getFrNode().getId());
+                            addFaildNodeToSynchFeatures(session.getMember().getId());
                         }
-
                     } catch (Exception e1) {
-
                         log.error("", e1);
                     }
                 } else if (state == STATE_UNPROPER) {
-
                     log.error("Last synch failed, due to struggle (or othere other hard errors) with edge {}. Trying other links", session.getFrNodeId());
-
                     try {
-
                         synchronized (session.unproperMutx) {
-
                             if (session.isUnproper()) {
-
                                 return;
                             }
-
                             session.setUnproper(true);
-
                             numberOfTrieds++;
-                            addFaildNodeToSynchFeatures(session.getFrNode().getId());
+                            addFaildNodeToSynchFeatures(session.getMember().getId());
                         }
-
                     } catch (Exception e1) {
-
                         log.error("", e1);
                     }
                 }
-
                 break;
-
             default:
                 break;
         }
-
         createResult();
     }
 
     private void createResult() {
-
         //TODO seems wrong for ring in balance mode
         if (sessions == null || (this.expectedNodes != null &&
                 this.expectedNodes.size() == 0) ||
                 ids == null || numberOfTrieds == ids.length ||
                 (numberOfTrieds > 0 && this.synch == SynchType.UNICAST_ONE_OF)) {
-
             int synchingNodesLength = ids == null ? 0 : ids.length;
-
             boolean isQueriom = synch == SynchType.UNICAST_QUERIOM ||
                     synch == SynchType.RING_QUERIOM ||
                     synch == SynchType.RING_BALANCE_QUERIOM ||
                     synch == SynchType.UNICAST_BALANCE_QUERIOM;
-
-            for (Iterator<Entry<String, SynchResult>> it = synchFeature.entrySet().iterator(); it.hasNext(); ) {
-                Entry<String, SynchResult> eit = it.next();
-
+            for (Entry<String, SynchResult> eit : synchFeature.entrySet()) {
                 SynchResult s = eit.getValue();
-
                 if (isQueriom) {
-
                     if (synchingNodesLength == 0) {
-
                         s.setSuccessful(false);
                     } else if (s.getFailedMembers().size() * 2 < synchingNodesLength) {
-
                         s.setSuccessful(true);
                     } else if (s.getSynchedMembers().size() * 2 > synchingNodesLength) {
-
                         s.setSuccessful(true);
                     } else {
-
                         s.setSuccessful(false);
                     }
                 } else {
-
                     if (synchingNodesLength == 0) {
-
                         s.setSuccessful(false);
                     } else if (s.getSynchedMembers().size() > 0) {
-
                         s.setSuccessful(true);
                     } else if (synch == SynchType.UNICAST_ONE_OF
                             && s.getFailedMembers().size() > 0) {
-
                         s.setSuccessful(false);
                     } else if (s.getFailedMembers().size() < synchingNodesLength) {
-
                         s.setSuccessful(true);
                     } else {
-
                         s.setSuccessful(false);
                     }
                 }
-
                 log.debug("Synch result for {} = {}", eit.getKey(), s.isSuccessful());
             }
 
             if (nonasynch) {
-
                 synchronized (nonasyncLock) {
-
                     nonasynch = false;
                     nonasyncLock.notify();
                     return;
@@ -1932,18 +1684,13 @@ public class SynchHandler extends IoHandlerAdapter {
             }
 
             if (callbak != null) {
-
                 callbak.result(synchFeature);
             }
         } else if (this.expectedNodes != null && this.synchContents.size() > 0) {
             //means it is ring but something has not done completely
-
             currentSocket = (++currentSocket) % sessions.size();
-
             log.warn("Using {}nd link of {} links", currentSocket + 1, sessions.size());
-
             int last_socket = currentSocket;
-
             while (sessions
                     .get(currentSocket)
                     .isAllTried()
@@ -1953,27 +1700,19 @@ public class SynchHandler extends IoHandlerAdapter {
                     .get(currentSocket).getFrNodeId())) {
 
                 if (currentSocket == last_socket) {
-
                     log.error("All linkes tried with no success. Synchnig failed");
-
                     //TODO I commented this in 14 APR 16
                     //synchContext.inStartup = false;
-
                     /*callbak.result(ids, false);*/
-
                     sessions = null;
-
                     /*
                      * In zone synchronizing, lastModified is always 0
                      * so this is safe to call
                      */
                     fixMonitorLastModified();
-
                     createResult();
-
                     return;
                 }
-
                 currentSocket = (++currentSocket) % sessions.size();
             }
 
@@ -1984,22 +1723,17 @@ public class SynchHandler extends IoHandlerAdapter {
             message.setSynchType(this.synch);
             message.setType(SynchMessage.TYPE_CHECK);
             message.setContents(this.synchContents.values());
-
-            sessions
-                    .get(currentSocket)
+            sessions.get(currentSocket)
                     .sendMsg(message);
         }
     }
 
     private void addFaildNodeToSynchFeatures(Short id) {
-
-        for (Iterator<Entry<String, SynchResult>> it = synchFeature.entrySet().iterator(); it.hasNext(); ) {
-
-            SynchResult s = it.next().getValue();
+        for (Entry<String, SynchResult> stringSynchResultEntry : synchFeature.entrySet()) {
+            SynchResult s = stringSynchResultEntry.getValue();
             s.addFailedMember(id);
         }
     }
-
 
     private void synchWithBalance(List<IMessage> msg) {
         this.starter = true;
@@ -2008,7 +1742,6 @@ public class SynchHandler extends IoHandlerAdapter {
             nonasyncLock = null;
             return;
         }
-
         List<Member> cluster = null;
         ISynchCallbak callBackHandler = new ISynchCallbak() {
             private short count = 0;
@@ -2041,167 +1774,41 @@ public class SynchHandler extends IoHandlerAdapter {
         this.synchFeature = new SynchFeature();
         if (this.synch == SynchType.UNICAST_BALANCE ||
                 this.synch == SynchType.UNICAST_BALANCE_QUERIOM) {
-            Map<Short, List<IMessage>> e2Mag = new HashMap<Short, List<IMessage>>();
+            Map<Short, List<IMessage>> e2Mag = new HashMap<>();
             if (ids == null || ids.length == 0) {
                 cluster = snapshot.getAliveCluster();
                 if (cluster.size() > 0) {
                     ids = new short[cluster.size()];
                 }
                 int i = 0;
-                for (Iterator<Member> eIt = cluster.iterator();
-                     eIt.hasNext(); ) {
-                    Member e = eIt.next();
+                for (Member e : cluster) {
                     ids[i++] = e.getId();
-                    List<IMessage> nodeMsgz = new ArrayList<IMessage>();
-                    for (Iterator<IMessage> it = msg.iterator();
-                         it.hasNext(); ) {
-                        IMessage m = it.next();
-                        Set<Short> nodes = null;
-                        if (this.mode == SynchMode.SYNCH_MESSAGE) {
-                            nodes = addAndGetAwareNodesOfMessage(m);
-                        } else {
-                            ClusterMessage cm = (ClusterMessage) m;
-                            Member node = synchContext.getMemberById(cm.getId());
-                            nodes = node == null ? null : node.getAwareIds();
-                        }
-
-                        if (nodes != null && nodes.contains(e.getId())) {
-                            continue;
-                        }
-                        nodeMsgz.add(m);
-                    }
-
-                    if (nodeMsgz.size() > 0) {
-                        e2Mag.put(e.getId(), nodeMsgz);
-                    }
+                    fillMessagesPerNode(msg, e2Mag, e);
                 }
             } else {
-
                 if (isInclusive) {
-
-                    for (int i = 0; i < ids.length; i++) {
-
-                        Member e = snapshot.getById(ids[i], 2);
-
+                    for (short id : ids) {
+                        Member e = snapshot.getById(id, 2);
                         if (e != null) {
-
-                            List<IMessage> nodeMsgz = new ArrayList<IMessage>();
-
-                            for (Iterator<IMessage> it = msg.iterator();
-                                 it.hasNext(); ) {
-
-                                IMessage m = it.next();
-
-                                Set<Short> nodes = null;
-
-                                if (this.mode == SynchMode.SYNCH_MESSAGE) {
-                                    nodes = addAndGetAwareNodesOfMessage(m);
-                                } else {
-
-                                    ClusterMessage cm = (ClusterMessage) m;
-                                    Member node = synchContext.getMemberById(cm.getId());
-
-                                    nodes = node == null ? null : node.getAwareIds();
-                                }
-
-                                if (nodes != null && nodes.contains(e.getId())) {
-
-                                    continue;
-                                }
-
-                                nodeMsgz.add(m);
-                            }
-
-                            if (nodeMsgz.size() > 0) {
-
-                                e2Mag.put(e.getId(), nodeMsgz);
-                            }
+                            fillMessagesPerNode(msg, e2Mag, e);
                         }
                     }
                 } else {
-
                     cluster = snapshot.getAliveCluster();
-
-                    ArrayList<Short> idss = new ArrayList<Short>();
-                    boolean found = false;
-
-                    for (Iterator<Member> it = cluster.iterator();
-                         it.hasNext(); ) {
-
-                        Member e = it.next();
-                        found = false;
-
-                        for (int i = 0; i < ids.length; i++) {
-
-                            if (ids[i] == e.getId()) {
-
-                                found = true;
-                                break;
-                            }
-                        }
-
-                        if (found) {
-
-                            continue;
-                        }
-
-                        idss.add(e.getId());
-                        List<IMessage> nodeMsgz = new ArrayList<IMessage>();
-
-                        for (Iterator<IMessage> mit = msg.iterator();
-                             mit.hasNext(); ) {
-
-                            IMessage m = mit.next();
-
-                            Set<Short> nodes = null;
-
-                            if (this.mode == SynchMode.SYNCH_MESSAGE) {
-                                nodes = addAndGetAwareNodesOfMessage(m);
-                            } else {
-
-                                ClusterMessage cm = (ClusterMessage) m;
-                                Member node = synchContext.getMemberById(cm.getId());
-
-                                nodes = node == null ? null : node.getAwareIds();
-                            }
-
-                            if (nodes != null && nodes.contains(e.getId())) {
-
-                                continue;
-                            }
-
-                            nodeMsgz.add(m);
-                        }
-
-                        if (nodeMsgz.size() > 0) {
-
-                            e2Mag.put(e.getId(), nodeMsgz);
-                        }
-                    }
-
+                    Set<Short> idss = new HashSet<>();
+                    doInverseIds(cluster, idss, member -> {
+                    });
                     this.ids = ArrayUtils.toPrimitive(idss.toArray(new Short[0]));
                 }
             }
 
             if (e2Mag.size() == 0) {
-
                 nonasyncLock = null;
-
-                for (Iterator<IMessage> xIt = msg.iterator(); xIt.hasNext(); ) {
-
-                    IMessage m = xIt.next();
-                    SynchResult sr = new SynchResult();
-                    sr.setSuccessful(true);
-                    this.synchFeature.put(m.getKey(), sr);
-                }
-
+                createSynchResultWhenDidtSend(msg);
                 return;
             }
 
-            for (Iterator<Entry<Short, List<IMessage>>> fIt = e2Mag.entrySet().iterator();
-                 fIt.hasNext(); ) {
-
-                Entry<Short, List<IMessage>> ee = fIt.next();
+            for (Entry<Short, List<IMessage>> ee : e2Mag.entrySet()) {
                 SynchHandler h = new SynchHandler(synchContext, this.synch)
                         .withCluster(ee.getKey())
                         .withCallBack(callBackHandler)
@@ -2214,184 +1821,93 @@ public class SynchHandler extends IoHandlerAdapter {
             return;
         } else if (this.synch == SynchType.RING_BALANCE ||
                 this.synch == SynchType.RING_BALANCE_QUERIOM) {
-
-            Set<Member> edges = new HashSet<Member>();
-
+            Set<Member> members = new HashSet<>();
             if (ids == null || ids.length == 0) {
-
                 cluster = snapshot.getAliveCluster();
-
                 if (cluster.size() > 0) {
-
                     ids = new short[cluster.size()];
                 }
-
                 int i = 0;
-
-                for (Iterator<Member> it = cluster.iterator();
-                     it.hasNext(); ) {
-
-                    Member e = it.next();
+                for (Member e : cluster) {
                     ids[i++] = e.getId();
-                    edges.add(e);
+                    members.add(e);
                 }
             } else {
-
                 if (isInclusive) {
-
-                    for (int i = 0; i < ids.length; i++) {
-
-                        Member e = snapshot.getById(ids[i], 2);
-
+                    for (short id : ids) {
+                        Member e = snapshot.getById(id, ClusterSnapshot.MEMBER_CHECK_VALID);
                         if (e != null) {
-
-                            edges.add(e);
+                            members.add(e);
                         }
                     }
                 } else {
-
                     cluster = snapshot.getAliveCluster();
-
-                    ArrayList<Short> idss = new ArrayList<Short>();
-                    boolean found = false;
-
-                    for (Iterator<Member> it = cluster.iterator();
-                         it.hasNext(); ) {
-
-                        Member e = it.next();
-                        found = false;
-
-                        for (int i = 0; i < ids.length; i++) {
-
-                            if (ids[i] == e.getId()) {
-
-                                found = true;
-                                break;
-                            }
-                        }
-
-                        if (found) {
-
-                            continue;
-                        }
-
-                        idss.add(e.getId());
-                        edges.add(e);
-                    }
-
+                    Set<Short> idss = new HashSet<>();
+                    doInverseIds(cluster, idss, members::add);
                     this.ids = ArrayUtils.toPrimitive(idss.toArray(new Short[0]));
                 }
             }
 
-            if (edges.size() > 0) {
-
-                Map<IMessage, Set<Short>> m2E = new HashMap<IMessage, Set<Short>>();
-
-                for (Iterator<IMessage> it = msg.iterator(); it.hasNext(); ) {
-
-                    IMessage m = it.next();
-
-                    Set<Short> eges4M = new HashSet<Short>();
-
-                    for (Iterator<Member> eIt = edges.iterator(); eIt.hasNext(); ) {
-
-                        Member e = eIt.next();
-
-                        Set<Short> nodes = null;
-
-                        if (this.mode == SynchMode.SYNCH_MESSAGE) {
-                            nodes = addAndGetAwareNodesOfMessage(m);
-                        } else {
-
-                            ClusterMessage cm = (ClusterMessage) m;
-                            Member node = synchContext.getMemberById(cm.getId());
-
-                            nodes = node == null ? null : node.getAwareIds();
-                        }
-
-                        if (nodes != null && nodes.contains(e.getId())) {
-
+            if (members.size() > 0) {
+                Map<IMessage, Set<Short>> message2NotAwareMembers = new HashMap<>();
+                for (IMessage m : msg) {
+                    Set<Short> membersForMessage = new HashSet<>();
+                    for (Member member : members) {
+                        if (getIfIsAware(m, member)) {
                             continue;
                         }
-
-                        eges4M.add(e.getId());
+                        membersForMessage.add(member.getId());
                     }
 
                     if (log.isDebugEnabled()) {
-
-                        log.debug("Created edge groups {} for message {}", eges4M, m.getKey());
+                        log.debug("Created edge groups {} for message {}", membersForMessage, m.getKey());
                     }
 
-                    if (eges4M.size() > 0) {
-
-                        m2E.put(m, eges4M);
+                    if (membersForMessage.size() > 0) {
+                        message2NotAwareMembers.put(m, membersForMessage);
                     } else {
-
                         SynchResult sr = new SynchResult();
                         sr.setSuccessful(true);
                         this.synchFeature.put(m.getKey(), sr);
                     }
                 }
 
-                if (m2E.size() > 0) {
-
-                    Set<String> proccessedMessages = new HashSet<String>();
-
-                    Map<List<IMessage>, Set<Short>> finalMessages2Nodes = new HashMap<List<IMessage>, Set<Short>>();
-
-                    for (Iterator<Entry<IMessage, Set<Short>>> it = m2E.entrySet().iterator();
-                         it.hasNext(); ) {
-
-                        Entry<IMessage, Set<Short>> ee = it.next();
-
+                if (message2NotAwareMembers.size() > 0) {
+                    Set<String> proccessedMessages = new HashSet<>();
+                    Map<List<IMessage>, Set<Short>> finalMessages2Members = new HashMap<>();
+                    for (Entry<IMessage, Set<Short>> ee : message2NotAwareMembers.entrySet()) {
                         if (ee.getValue().size() == 0 ||
                                 proccessedMessages.contains(ee.getKey().getKey())) {
-
                             continue;
                         }
 
-                        List<IMessage> mList = new ArrayList<IMessage>();
-
+                        List<IMessage> mList = new ArrayList<>();
                         proccessedMessages.add(ee.getKey().getKey());
                         mList.add(ee.getKey());
 
-                        for (Iterator<Entry<IMessage, Set<Short>>> innerIt = m2E.entrySet().iterator();
-                             innerIt.hasNext(); ) {
-
-                            Entry<IMessage, Set<Short>> eeInner = innerIt.next();
-
+                        for (Entry<IMessage, Set<Short>> eeInner : message2NotAwareMembers.entrySet()) {
                             if (eeInner.getValue().size() == 0 ||
                                     proccessedMessages.contains(eeInner.getKey().getKey())) {
-
                                 continue;
                             }
-
                             if (ee.getValue().containsAll(eeInner.getValue()) &&
                                     eeInner.getValue().containsAll(ee.getValue())) {
-
                                 mList.add(eeInner.getKey());
                                 proccessedMessages.add(eeInner.getKey().getKey());
                             }
                         }
-
-                        finalMessages2Nodes.put(mList, ee.getValue());
+                        finalMessages2Members.put(mList, ee.getValue());
                     }
 
-                    if (finalMessages2Nodes.size() > 0) {
-
-                        for (Iterator<Entry<List<IMessage>, Set<Short>>> it = finalMessages2Nodes
-                                .entrySet().iterator();
-                             it.hasNext(); ) {
-
-                            Entry<List<IMessage>, Set<Short>> ee = it.next();
-
+                    if (finalMessages2Members.size() > 0) {
+                        for (Entry<List<IMessage>, Set<Short>> ee : finalMessages2Members
+                                .entrySet()) {
                             SynchHandler h = new SynchHandler(synchContext, this.synch)
                                     .withCluster(ArrayUtils.toPrimitive(ee.getValue()
                                             .toArray(new Short[0])))
                                     .withCallBack(callBackHandler)
                                     .withEncoder(this.encoder)
                                     .withBalance();
-
                             h.mode = this.mode;
                             h.synch(ee.getKey());
                         }
@@ -2401,21 +1917,49 @@ public class SynchHandler extends IoHandlerAdapter {
                 }
             }
 
-            for (Iterator<IMessage> xIt = msg.iterator(); xIt.hasNext(); ) {
-
-                IMessage m = xIt.next();
-                SynchResult sr = new SynchResult();
-                sr.setSuccessful(true);
-                this.synchFeature.put(m.getKey(), sr);
-            }
-
+            createSynchResultWhenDidtSend(msg);
             nonasyncLock = null;
         }
-
         return;
     }
 
-    void fixMonitorLastModified() {
+    private boolean getIfIsAware(IMessage m, Member e) {
+        Set<Short> memberIds = null;
+        if (this.mode == SynchMode.SYNCH_MESSAGE) {
+            memberIds = addAndGetAwareNodesOfMessage(m);
+        } else {
+            ClusterMessage cm = (ClusterMessage) m;
+            Member node = synchContext.getMemberById(cm.getId());
+            memberIds = node == null ? null : node.getAwareIds();
+        }
 
+        if (memberIds != null && memberIds.contains(e.getId())) {
+            return true;
+        }
+        return false;
+    }
+
+    private void createSynchResultWhenDidtSend(List<IMessage> msg) {
+        for (Iterator<IMessage> xIt = msg.iterator(); xIt.hasNext(); ) {
+            IMessage m = xIt.next();
+            SynchResult sr = new SynchResult();
+            sr.setSuccessful(true);
+            this.synchFeature.put(m.getKey(), sr);
+        }
+    }
+
+    private void fillMessagesPerNode(List<IMessage> msg, Map<Short, List<IMessage>> e2Mag, Member member1) {
+        List<IMessage> memberMsgz = new ArrayList<>();
+        for (IMessage m : msg) {
+            if (getIfIsAware(m, member1)) continue;
+            memberMsgz.add(m);
+        }
+
+        if (memberMsgz.size() > 0) {
+            e2Mag.put(member1.getId(), memberMsgz);
+        }
+    }
+
+    void fixMonitorLastModified() {
     }
 }

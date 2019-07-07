@@ -6,11 +6,10 @@ import java.util.List;
 
 import javax.net.ssl.SSLContext;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.mina.core.future.ConnectFuture;
 import org.apache.mina.core.future.IoFutureListener;
 import org.apache.mina.filter.ssl.SslFilter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.github.madzdns.clusterlet.Member.ClusterAddress;
 import com.github.madzdns.clusterlet.api.net.NetProvider;
@@ -19,44 +18,30 @@ import com.github.madzdns.clusterlet.codec.SynchMessage;
 import com.github.madzdns.clusterlet.codec.mina.SynchMinaDecoder;
 import com.github.madzdns.clusterlet.codec.mina.SynchMinaEncoder;
 
+@Slf4j
 class SynchSession {
-
-    private static Logger log = LoggerFactory.getLogger(SynchSession.class);
-
     class MinaConnectListener implements IoFutureListener<ConnectFuture> {
-
         private String link = "";
         private SynchMessage msg;
-
         public MinaConnectListener(SynchMessage msg) {
-
             this.msg = msg;
         }
 
         @Override
         public void operationComplete(ConnectFuture connection) {
-
             Throwable e = connection.getException();
-
             if (e != null) {
-
                 if (e instanceof ConnectException) {
-
-                    log.error("{} to node {}", e.getMessage(), SynchSession.this.getFrNodeId());
+                    log.error("{} to member {}", e.getMessage(), SynchSession.this.getFrNodeId());
                 } else {
-
                     log.error("", e);
                 }
-
                 if (e instanceof ConnectException)
-
                     handler.workCallback(SynchSession.this, SynchHandler.STATE_WORK_FAILED, link);
             } else if (!connection.isConnected()) {
-
                 handler.workCallback(SynchSession.this, SynchHandler.STATE_WORK_FAILED, link);
 
             } else {
-
                 connection.getSession().setAttribute("SynchSession", SynchSession.this);
                 log.debug("Connection is stablished in link {} ", link);
                 connection.getSession().write(msg);
@@ -64,15 +49,11 @@ class SynchSession {
         }
 
         public String getLink() {
-
             return link;
         }
 
         public void setLink(String remote, int port) {
-
-            this.link = new StringBuilder(remote)
-                    .append(":")
-                    .append(port).toString();
+            this.link = remote + ":" + port;
         }
 
     }
@@ -87,7 +68,7 @@ class SynchSession {
 
     private SynchHandler handler;
 
-    private Member node = null;
+    private Member member = null;
 
     private boolean allTried = false;
 
@@ -95,15 +76,15 @@ class SynchSession {
 
     Object unproperMutx = new Object();
 
-    public SynchSession(Member node, SynchHandler handler) {
-        this.sockets = new ArrayList<>(node.getSynchAddresses());
+    public SynchSession(Member member, SynchHandler handler) {
+        this.sockets = new ArrayList<>(member.getSynchAddresses());
         this.handler = handler;
-        this.node = node;
+        this.member = member;
 
         if (this.sockets.size() == 0) {
-            node.setCurrentSocketIndex(currentSocket = -1);
+            member.setCurrentSocketIndex(currentSocket = -1);
         } else {
-            currentSocket = node.getCurrentSocketIndex();
+            currentSocket = member.getCurrentSocketIndex();
             lastSocket = currentSocket;
         }
     }
@@ -116,9 +97,9 @@ class SynchSession {
         currentSocket = (++currentSocket) % sockets.size();
         ClusterAddress c = sockets.get(currentSocket);
         if (log.isDebugEnabled()) {
-            log.debug("Setting next socket {}:{} of edge {}", c.getAddress().getHostAddress(), c.getPort(), node.getId());
+            log.debug("Setting next socket {}:{} of edge {}", c.getAddress().getHostAddress(), c.getPort(), member.getId());
         }
-        node.setCurrentSocketIndex(currentSocket);
+        member.setCurrentSocketIndex(currentSocket);
         if (currentSocket == lastSocket) {
             allTried = true;
         }
@@ -149,16 +130,16 @@ class SynchSession {
 
                 socket.setHandler(handler);
 
-                if (!node.isAuthByKey()) {
+                if (!member.isAuthByKey()) {
 
-                    log.warn("no need to authenticate by key for node {}", getFrNodeId());
+                    log.warn("no need to authenticate by key for member {}", getFrNodeId());
                     msg.setKeyChain(null);
                 } else {
 
-                    msg.setKeyChain(node.getKeyChain());
+                    msg.setKeyChain(member.getKeyChain());
                 }
 
-                if (node.isUseSsl()) {
+                if (member.isUseSsl()) {
 
                     String cer = handler.synchContext.getConfig().getCertificatePath();
                     SSLContext ssl = null;
@@ -194,51 +175,40 @@ class SynchSession {
                     socket.connect(this.new MinaConnectListener(msg));
 
                 } catch (Exception e) {
-
                     log.error("", e);
-
                     handler.workCallback(this, SynchHandler.STATE_WORK_FAILED,
                             currentEdgeSocketAddr.getAddress().getHostAddress());
                 }
             } else if (handler != null) {
-
                 handler.workCallback(this, SynchHandler.STATE_WORK_FAILED, "");
             }
         }
     }
 
     public SynchHandler getHandler() {
-
         return handler;
     }
 
     public void setHandler(SynchHandler handler) {
-
         this.handler = handler;
     }
 
     public boolean isAllTried() {
-
         return allTried || currentSocket < 0;
     }
 
     public void setAllTried(boolean allTried) {
-
         this.allTried = allTried;
     }
 
     public short getFrNodeId() {
-
-        if (node == null)
-
-            return 0;
-
-        return node.getId();
+        if (member == null){
+            return 0;}
+        return member.getId();
     }
 
-    public Member getFrNode() {
-
-        return node;
+    public Member getMember() {
+        return member;
     }
 
     public boolean isUnproper() {
