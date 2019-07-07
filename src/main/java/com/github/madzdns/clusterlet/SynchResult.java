@@ -6,13 +6,11 @@ import java.util.Set;
 public class SynchResult {
 
 	private boolean successful;
-	private Set<Short> faildNodes;
-	private Set<Short> synchedNodes;
-	
+	private Set<Short> failedMembers;
+	private Set<Short> synchedMembers;
 	public SynchResult() {
-		
-		this.faildNodes = new HashSet<Short>();
-		this.synchedNodes = new HashSet<Short>();
+		this.failedMembers = new HashSet<>();
+		this.synchedMembers = new HashSet<>();
 	}
 	
 	/**
@@ -33,87 +31,67 @@ public class SynchResult {
 	 * 
 	 * @return id of nodes that message was failed to synched with them
 	 */
-	public Set<Short> getFaildNodes() {
-		
-		return faildNodes;
+	public Set<Short> getFailedMembers() {
+		return failedMembers;
 	}
 	
-	public void setFaildNodes(Set<Short> faildNodes) {
-		
-		this.faildNodes = faildNodes;
+	public void setFailedMembers(Set<Short> failedMembers) {
+		this.failedMembers = failedMembers;
 	}
 	
 	/**
 	 * 
 	 * @return id of nodes that message was successfully synched with them
 	 */
-	public Set<Short> getSynchedNodes() {
-		
-		return synchedNodes;
+	public Set<Short> getSynchedMembers() {
+		return synchedMembers;
 	}
 	
-	public void setSynchedNodes(Set<Short> synchedNodes) {
-		
-		this.synchedNodes = synchedNodes;
+	public void setSynchedMembers(Set<Short> synchedNodes) {
+		this.synchedMembers = synchedNodes;
 	}
 	
-	public void addSynchedNode(Short id) {
-		
-		this.synchedNodes.add(id);
+	public void addSynchedMember(Short id) {
+		this.synchedMembers.add(id);
 	}
 	
-	public void addSynchedNode(Set<Short> ids) {
-		
+	public void addSynchedMember(Set<Short> ids) {
 		if(ids == null) {
-			
 			return;
 		}
-		
-		this.synchedNodes.addAll(ids);
+		this.synchedMembers.addAll(ids);
 	}
 	
-	public void removeSynchedNode(Set<Short> ids) {
-		
+	public void removeSynchedMember(Set<Short> ids) {
 		if(ids == null) {
-			
 			return;
 		}
-
-		this.synchedNodes.removeAll(ids);
+		this.synchedMembers.removeAll(ids);
 	}
 	
-	public void removeSynchedNode(Short id) {
-		
-		this.synchedNodes.remove(id);
+	public void removeSynchedMember(Short id) {
+		this.synchedMembers.remove(id);
 	}
 	
-	public void addFaildNode(Short id) {
-		
-		this.faildNodes.add(id);
+	public void addFailedMember(Short id) {
+		this.failedMembers.add(id);
 	}
 	
-	public void addFaildNode(Set<Short> ids) {
-		
+	public void addFailedMember(Set<Short> ids) {
 		if(ids == null) {
-			
 			return;
 		}
-
-		this.faildNodes.addAll(ids);
+		this.failedMembers.addAll(ids);
 	}
 	
-	public void removeFaildNode(Set<Short> ids) {
-		
+	public void removeFailedMember(Set<Short> ids) {
 		if(ids == null) {
-			
 			return;
 		}
-
-		this.faildNodes.removeAll(ids);
+		this.failedMembers.removeAll(ids);
 	}
 	
-	public void removeFaildNode(Short id) {
-		
-		this.faildNodes.remove(id);
+	public void removeFailedMember(Short id) {
+		this.failedMembers.remove(id);
 	}
 }
