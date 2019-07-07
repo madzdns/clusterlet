@@ -2,16 +2,8 @@ package com.github.madzdns.clusterlet;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Set;
 
 import javax.net.ssl.SSLContext;
 
@@ -63,7 +55,7 @@ public class SynchHandler extends IoHandlerAdapter {
     private short numberOfTrieds = 0;
     private boolean startupState;
     private SynchFeature synchFeature = null;
-    private boolean synchModel = true;
+    private boolean isInclusive = true;
     private Map<String, SynchContent> synchContents = null;
     private boolean withBalance = false;
     private Set<Short> expectedNodes;
@@ -72,26 +64,22 @@ public class SynchHandler extends IoHandlerAdapter {
     private Class<? extends IMessage> encoder;
 
     private SynchHandler withModeCluster() {
-
         this.mode = SynchMode.SYNCH_CLUSTER;
         return this;
     }
 
     private SynchHandler withBalance() {
-
         this.withBalance = true;
         return this;
     }
 
     SynchHandler(SynchContext ctx) {
-
         this.starter = false;
         this.synchContext = ctx;
         this.me = ctx.getMyInfo();
     }
 
     SynchHandler(SynchContext ctx, SynchType synch) {
-
         this.starter = true;
         this.synch = synch;
         this.synchContext = ctx;
@@ -109,7 +97,6 @@ public class SynchHandler extends IoHandlerAdapter {
      * with the received message
      */
     public SynchHandler withCallBack(ISynchCallbak callbak) {
-
         this.callbak = callbak;
         return this;
     }
@@ -122,8 +109,7 @@ public class SynchHandler extends IoHandlerAdapter {
      * @return this SynchHandler
      */
     public SynchHandler withCluster(short... ids) {
-
-        this.synchModel = true;
+        this.isInclusive = true;
         this.ids = ids;
         return this;
     }
@@ -135,7 +121,6 @@ public class SynchHandler extends IoHandlerAdapter {
      * @return this SynchHandler
      */
     public SynchHandler withEncoder(Class<? extends IMessage> encoder) {
-
         this.encoder = encoder;
         return this;
     }
@@ -147,8 +132,7 @@ public class SynchHandler extends IoHandlerAdapter {
      * @return this SynchHandler
      */
     public SynchHandler withoutCluster(short... ids) {
-
-        synchModel = false;
+        isInclusive = false;
         this.ids = ids;
         return this;
     }
@@ -161,8 +145,28 @@ public class SynchHandler extends IoHandlerAdapter {
      * @return
      */
     public SynchHandler synch(IMessage msg) {
+        return synch(Collections.singletonList(msg));
+    }
 
-        return synch(Arrays.asList(msg));
+    private boolean checkWithBalanceAndSetCallback() {
+        if (this.withBalance) {
+            this.callbak.result(null);
+            return true;
+        }
+        return false;
+    }
+
+    private void doInverseIds(List<Member> cluster, Set<Short> idss) {
+        Set<Short> idSet = new HashSet<>();
+        for (short id : ids) {
+            idSet.add(id);
+        }
+        cluster.stream().filter(member -> !idSet.contains(member.getId())).forEach(
+                member -> {
+                    idss.add(member.getId());
+                    sessions.add(member.createSynchSession(SynchHandler.this));
+                }
+        );
     }
 
     /**
@@ -176,152 +180,89 @@ public class SynchHandler extends IoHandlerAdapter {
         this.starter = true;
         if (msg == null || msg.size() == 0 ||
                 this.callbak == null || (mode == SynchMode.SYNCH_MESSAGE && this.encoder == null)) {
-            log.error("messages {}, callback {} encoder {}", msg, callbak, encoder);
+            log.warn("messages {}, callback {} encoder {}", msg, callbak, encoder);
             nonasyncLock = null;
-            if (this.withBalance) {
-                this.callbak.result(null);
-            }
+            checkWithBalanceAndSetCallback();
             return this;
         }
 
         ClusterSnapshot snapshot = synchContext.getSnapshot();
         if (snapshot == null) {
             nonasyncLock = null;
-            if (this.withBalance) {
-                this.callbak.result(null);
-            }
+            checkWithBalanceAndSetCallback();
             return this;
         }
 
-        if (this.synch == SynchType.RING_BALANCE ||
-                this.synch == SynchType.RING_BALANCE_QUERIOM ||
-                this.synch == SynchType.UNICAST_BALANCE ||
-                this.synch == SynchType.UNICAST_BALANCE_QUERIOM) {
+        if (SynchType.checkIfBalanceType(this.synch)) {
             if (!this.withBalance) {
                 synchWithBalance(msg);
                 return this;
             }
         }
-        List<Member> cluster = null;
-        if (this.synch == SynchType.UNICAST ||
-                this.synch == SynchType.UNICAST_QUERIOM ||
-                this.synch == SynchType.UNICAST_BALANCE ||
-                this.synch == SynchType.UNICAST_BALANCE_QUERIOM ||
-                this.synch == SynchType.UNICAST_ONE_OF) {
+        List<Member> cluster = snapshot.getAliveCluster();
+        sessions = new ArrayList<>();
+        if (SynchType.checkIfUnicastType(this.synch)) {
             if (ids == null || ids.length == 0) {
-                if (this.withBalance) {
-                    this.callbak.result(null);
+                if (checkWithBalanceAndSetCallback()) {
                     return this;
                 }
-
-                cluster = snapshot.getAliveCluster();
-                sessions = new ArrayList<SynchSession>();
                 if (cluster.size() > 0) {
                     ids = new short[cluster.size()];
-                }
-
-                int i = 0;
-                for (Member e : cluster) {
-                    ids[i++] = e.getId();
-                    sessions.add(e.createSynchSession(this));
+                    int i = 0;
+                    for (Member e : cluster) {
+                        ids[i++] = e.getId();
+                        sessions.add(e.createSynchSession(this));
+                    }
                 }
             } else {
-                sessions = new ArrayList<SynchSession>();
-                if (synchModel) {
+                if (isInclusive) {
                     for (short id : ids) {
-                        Member e = snapshot.getById(id, 2);
+                        Member e = snapshot.getById(id, ClusterSnapshot.MEMBER_CHECK_VALID);
                         if (e != null) {
                             sessions.add(e.createSynchSession(this));
                         }
                     }
                 } else {
-                    cluster = snapshot.getAliveCluster();
-                    ArrayList<Short> idss = new ArrayList<Short>();
-                    boolean found = false;
-                    for (Iterator<Member> it = cluster.iterator();
-                         it.hasNext(); ) {
-                        Member e = it.next();
-                        found = false;
-                        for (int i = 0; i < ids.length; i++) {
-                            if (ids[i] == e.getId()) {
-                                found = true;
-                                break;
-                            }
-                        }
-                        if (found) {
-                            continue;
-                        }
-                        idss.add(e.getId());
-                        sessions.add(e.createSynchSession(this));
-                    }
+                    Set<Short> idss = new HashSet<>();
+                    doInverseIds(cluster, idss);
                     this.ids = ArrayUtils.toPrimitive(idss.toArray(new Short[0]));
                 }
             }
-        } else if (this.synch == SynchType.RING ||
-                this.synch == SynchType.RING_QUERIOM ||
-                this.synch == SynchType.RING_BALANCE ||
-                this.synch == SynchType.RING_BALANCE_QUERIOM) {
+        } else if (SynchType.checkIfRingType(this.synch)) {
             if (ids == null || ids.length == 0) {
-                if (this.withBalance) {
-                    this.callbak.result(null);
+                if (checkWithBalanceAndSetCallback()) {
                     return this;
                 }
 
-                cluster = snapshot.getAliveCluster();
                 if (cluster.size() > 0) {
                     ids = new short[cluster.size()];
-                    this.expectedNodes = new HashSet<Short>();
-                }
-
-                int i = 0;
-                sessions = new ArrayList<SynchSession>();
-                for (Member e : cluster) {
-                    ids[i++] = e.getId();
-                    sessions.add(e.createSynchSession(this));
-                    this.expectedNodes.add(e.getId());
+                    this.expectedNodes = new HashSet<>();
+                    int i = 0;
+                    for (Member e : cluster) {
+                        ids[i++] = e.getId();
+                        sessions.add(e.createSynchSession(this));
+                        this.expectedNodes.add(e.getId());
+                    }
                 }
             } else {
-                sessions = new ArrayList<SynchSession>();
-                if (synchModel) {
-                    this.expectedNodes = new HashSet<Short>();
+                if (isInclusive) {
+                    this.expectedNodes = new HashSet<>();
                     for (short id : ids) {
-                        Member e = snapshot.getById(id, 2);
-                        if (e != null) {
-                            sessions.add(e.createSynchSession(this));
+                        Member member = snapshot.getById(id, ClusterSnapshot.MEMBER_CHECK_VALID);
+                        if (member != null) {
+                            sessions.add(member.createSynchSession(this));
                             this.expectedNodes.add(id);
                         }
                     }
                 } else {
-                    cluster = snapshot.getAliveCluster();
-
-                    ArrayList<Short> idss = new ArrayList<Short>();
-                    this.expectedNodes = new HashSet<Short>();
-                    boolean found = false;
-                    for (Iterator<Member> it = cluster.iterator();
-                         it.hasNext(); ) {
-                        Member e = it.next();
-                        found = false;
-                        for (int i = 0; i < ids.length; i++) {
-                            if (ids[i] == e.getId()) {
-                                found = true;
-                                break;
-                            }
-                        }
-
-                        if (found) {
-                            continue;
-                        }
-                        idss.add(e.getId());
-                        sessions.add(e.createSynchSession(this));
-                    }
-                    this.expectedNodes.addAll(idss);
-                    this.ids = ArrayUtils.toPrimitive(idss.toArray(new Short[0]));
+                    expectedNodes = new HashSet<>();
+                    doInverseIds(cluster, expectedNodes);
+                    this.ids = ArrayUtils.toPrimitive(expectedNodes.toArray(new Short[0]));
                 }
             }
         }
 
-        this.startupState = synchContext.isInStartup();
-
+        startupState = synchContext.isInStartup();
         SynchMessage message = new SynchMessage();
         message.setSynchType(synch);
         message.setId(me.getId());
@@ -329,83 +270,56 @@ public class SynchHandler extends IoHandlerAdapter {
         message.setSynchMode(mode);
         message.setType(SynchMessage.TYPE_CHECK);
 
-        synchContents = new HashMap<String, SynchContent>();
-
+        synchContents = new HashMap<>();
         this.synchFeature = new SynchFeature();
-
-        for (Iterator<IMessage> it = msg.iterator();
-             it.hasNext(); ) {
-
-            IMessage m = it.next();
-
+        for (IMessage m : msg) {
             Set<Short> awareIds = null;
-
             if (this.mode == SynchMode.SYNCH_MESSAGE) {
-
                 if (m.getKey() != null && !m.getKey().equals("") && m.getVersion() > 0) {
-
-                    awareIds = synchContext.getAwareNodes(m.getKey(), m.getVersion());
-
-                    if (awareIds == null || awareIds.size() == 0) {
-
-                        awareIds = new HashSet<Short>();
-                        awareIds.add(synchContext.myId);
-                        synchContext.addAwareNodes(m.getKey(), m.getVersion(), awareIds);
-                    }
+                    awareIds = addAndGetAwareNodesOfMessage(m);
                 }
             } else if (m.getKey() != null && !m.getKey().equals("") && m.getVersion() > 0) {
-
                 ClusterMessage cm = (ClusterMessage) m;
-                Member node = synchContext.getFrNodeById(cm.getId());
-
+                Member node = synchContext.getMemberById(cm.getId());
                 awareIds = node == null ? null : node.getAwareIds();
             }
-
-            log.debug("aware Nodes for {} = {}", m.getKey(), awareIds);
-
+            log.debug("aware members for {} = {}", m.getKey(), awareIds);
             synchContents.put(m.getKey(), new SynchContent(m.getKey(), m.getVersion(), awareIds, m.serialize()));
-
             SynchResult s = new SynchResult();
             s.addSynchedNode(awareIds);
             this.synchFeature.put(m.getKey(), s);
         }
-
         message.setContents(synchContents.values());
-
         if (log.isDebugEnabled()) {
-
             log.debug("created synchContents ==> {} for synch type {}", synchContents.values(), synch);
             log.debug("created sessions ==> {}", sessions);
         }
 
         if (sessions != null && sessions.size() > 0) {
-
-            if (this.synch == SynchType.RING ||
-                    this.synch == SynchType.RING_QUERIOM ||
-                    this.synch == SynchType.RING_BALANCE ||
-                    this.synch == SynchType.RING_BALANCE_QUERIOM ||
-                    this.synch == SynchType.UNICAST_ONE_OF) {
-
+            if (SynchType.checkIfRingType(synch) ||
+                    synch == SynchType.UNICAST_ONE_OF) {
                 sessions.get(0).sendMsg(message);
-            } else if (this.synch == SynchType.UNICAST ||
-                    this.synch == SynchType.UNICAST_QUERIOM ||
-                    this.synch == SynchType.UNICAST_BALANCE ||
-                    this.synch == SynchType.UNICAST_BALANCE_QUERIOM) {
-
-                for (Iterator<SynchSession> it = sessions.iterator();
-                     it.hasNext(); ) {
-
-                    SynchSession s = it.next();
+            } else if (SynchType.checkIfUnicastType(synch)) {
+                for (SynchSession s : sessions) {
                     s.sendMsg(message);
                 }
             }
         } else {
-
             nonasyncLock = null;
             createResult();
         }
-
         return this;
+    }
+
+    private Set<Short> addAndGetAwareNodesOfMessage(IMessage m) {
+        Set<Short> awareIds;
+        awareIds = synchContext.getAwareNodes(m.getKey(), m.getVersion());
+        if (awareIds == null || awareIds.size() == 0) {
+            awareIds = new HashSet<Short>();
+            awareIds.add(synchContext.myId);
+            synchContext.addAwareNodes(m.getKey(), m.getVersion(), awareIds);
+        }
+        return awareIds;
     }
 
     /**
@@ -495,35 +409,35 @@ public class SynchHandler extends IoHandlerAdapter {
 		/*
 		 * If this member does not know the member sent this
 		 * message, with this code, it discards the communication.
-		 * But this is wrong. Because this way there is no possibility 
+		 * But this is wrong. Because this way there is no possibility
 		 * of adding new edges to cluster.
 		 * So I decided to assign this rule:
-		 * If an edge starts communication via EdgeSocket, it must bring 
+		 * If an edge starts communication via EdgeSocket, it must bring
 		 * destination edge's key chain. But when an edge received a message,
 		 * it does not need to put senders key chain in answer.
 		 * The security is on TCP's shoulder.
-		 * 
+		 *
 		if(him == null) {
-			
+
 			him = ClusterSynch.getEdgeInfoSynch(msg.getId());
-			
+
 			if(him==null) {
-				
+
 				log.error("Could not find Edge {} info",msg.getId());
-				
+
 				SynchResponce r = new SynchResponce();
-				
+
 				r.setId(me.getId());
-				
+
 				r.setType(SynchMessage.TYPE_BAD_ID);
-				
+
 				session.write(r);
-				
+
 				r = null;
-				
+
 				session.close(false);
-				
-				return;	
+
+				return;
 			}
 		}*/
 
@@ -594,7 +508,7 @@ public class SynchHandler extends IoHandlerAdapter {
 
             Member him = (Member) session.getAttribute(HIM_KEY);
             if (him == null) {
-                him = synchContext.getFrNodeById(msg.getId());
+                him = synchContext.getMemberById(msg.getId());
                 log.debug("Received node was {} for id {} in my database", him, msg.getId());
                 session.setAttribute(HIM_KEY, him);
             }
@@ -714,7 +628,7 @@ public class SynchHandler extends IoHandlerAdapter {
 
                             if (responses == null) {
 								/* I decided to not send this sort of situation
-								 * responseContents.add(new SynchContent(sc.getKey(), 
+								 * responseContents.add(new SynchContent(sc.getKey(),
 										sc.getVersion(),
 										awareNodes, null));*/
                                 continue;
@@ -757,19 +671,19 @@ public class SynchHandler extends IoHandlerAdapter {
                 if (messagesForRing.size() > 0) {
 
                     ISynchCallbak callBack = this.callbak;
-					
+
 					/*try {
-						
+
 						callBack = this.callbak.getClass().newInstance();
-						
+
 					} catch (Exception e) {
-						
+
 						log.error("", e);
 						SynchMessage m = new SynchMessage();
 						m.setId(me.getId());
 						m.setSynchMode(SynchMode.SYNCH_MESSAGE);
 						m.setType(SynchMessage.TYPE_FAILD_RING);
-						
+
 						session.write(m);
 						session.close(true);
 						return;
@@ -967,7 +881,7 @@ public class SynchHandler extends IoHandlerAdapter {
 
                             try {
 
-                                node = synchContext.getFrNodeById(Short.parseShort(sc.getKey()));
+                                node = synchContext.getMemberById(Short.parseShort(sc.getKey()));
 
                                 if (node != null) {
 
@@ -1017,7 +931,7 @@ public class SynchHandler extends IoHandlerAdapter {
 
                             if (response != null) {
 
-                                Member node = synchContext.getFrNodeById(response.getId());
+                                Member node = synchContext.getMemberById(response.getId());
 
                                 Set<Short> awareIds = null;
 
@@ -1097,9 +1011,9 @@ public class SynchHandler extends IoHandlerAdapter {
                         IMessage m = mIt.next();
 
                         SynchResult s = sf.get(m.getKey());
-						
+
 						/*if(s == null) {
-							
+
 							//In the case of balance, there might be some messages gets omitted
 							continue;
 						}*/
@@ -1108,7 +1022,7 @@ public class SynchHandler extends IoHandlerAdapter {
 
                             SynchProtocolOutput out = new SynchProtocolOutput();
 
-                            Member node = synchContext.getFrNodeById(((ClusterMessage) m).getId());
+                            Member node = synchContext.getMemberById(((ClusterMessage) m).getId());
 
                             Set<Short> awareIds = null;
 
@@ -1150,7 +1064,7 @@ public class SynchHandler extends IoHandlerAdapter {
 
                                 if (response != null) {
 
-                                    node = synchContext.getFrNodeById(((ClusterMessage) response).getId());
+                                    node = synchContext.getMemberById(((ClusterMessage) response).getId());
 
                                     awareIds = null;
 
@@ -1324,7 +1238,7 @@ public class SynchHandler extends IoHandlerAdapter {
                 if (contents == null) {
 
                     log.warn("Wrong state - RCVD contents should not be null");
-					
+
 					/*
 					 * I think it is wrong to put these to line in here
 					 * so I replaced them with workCallback()
@@ -1488,11 +1402,11 @@ public class SynchHandler extends IoHandlerAdapter {
                                     0/*sc.getVersion()*/,
                                     iFaild, null));
                         }
-						
+
 						/*
 						 * I think it is not right to do this here
 						 * if(response == null) {
-							
+
 							synchFeature.get(sc.getKey()).addFaildNode(msg.getId());
 						}*/
                     } else {
@@ -1578,8 +1492,8 @@ public class SynchHandler extends IoHandlerAdapter {
                             }
                         }
 						/*else {
-							
-							responseContents.add(new SynchContent(sc.getKey(), 
+
+							responseContents.add(new SynchContent(sc.getKey(),
 									sc.getVersion(),
 									awareNodes, null));
 						}*/
@@ -1629,7 +1543,7 @@ public class SynchHandler extends IoHandlerAdapter {
                 if (contents == null) {
 
                     log.warn("Wrong state - RCVD contents should not be null");
-					
+
 					/*
 					 * I think it is wrong to put these to line in here
 					 * so I replaced them with workCallback()
@@ -1702,7 +1616,7 @@ public class SynchHandler extends IoHandlerAdapter {
 
                             try {
 
-                                node = synchContext.getFrNodeById(Short.parseShort(sc.getKey()));
+                                node = synchContext.getMemberById(Short.parseShort(sc.getKey()));
 
                                 if (node != null) {
 
@@ -1774,7 +1688,7 @@ public class SynchHandler extends IoHandlerAdapter {
 
                                 if (response != null) {
 
-                                    Member node = synchContext.getFrNodeById(response.getId());
+                                    Member node = synchContext.getMemberById(response.getId());
 
                                     Set<Short> awareIds = null;
 
@@ -1820,16 +1734,16 @@ public class SynchHandler extends IoHandlerAdapter {
                                     0/*sc.getVersion()*/,
                                     iFaild, null));
                         }
-						
+
 						/*
 						 * I think it is not right to do this here
 						 * if(response == null) {
-							
+
 							synchFeature.get(sc.getKey()).addFaildNode(msg.getId());
 						}*/
                     } else {
 
-                        Member node = synchContext.getFrNodeById(decoded.getId());
+                        Member node = synchContext.getMemberById(decoded.getId());
 
                         Set<Short> awareIds = sc.getAwareIds();
 
@@ -1899,7 +1813,7 @@ public class SynchHandler extends IoHandlerAdapter {
 
                                 ClusterMessage response = (ClusterMessage) respIt.next();
 
-                                node = synchContext.getFrNodeById(response.getId());
+                                node = synchContext.getMemberById(response.getId());
 
                                 awareIds = null;
 
@@ -1913,11 +1827,11 @@ public class SynchHandler extends IoHandlerAdapter {
                             }
                         }
 						/*else {
-							
-							responseContents.add(new SynchContent(sc.getKey(), 
+
+							responseContents.add(new SynchContent(sc.getKey(),
 									sc.getVersion(),
 									awareIds, null));
-							
+
 							numberOfTrueResultsWithoutContents ++;
 						}*/
                     }
@@ -2486,15 +2400,10 @@ public class SynchHandler extends IoHandlerAdapter {
                         IMessage m = it.next();
                         Set<Short> nodes = null;
                         if (this.mode == SynchMode.SYNCH_MESSAGE) {
-                            nodes = synchContext.getAwareNodes(m.getKey(), m.getVersion());
-                            if (nodes == null || nodes.size() == 0) {
-                                nodes = new HashSet<Short>();
-                                nodes.add(synchContext.myId);
-                                synchContext.addAwareNodes(m.getKey(), m.getVersion(), nodes);
-                            }
+                            Set<Short> nodes = addAndGetAwareNodesOfMessage(m);
                         } else {
                             ClusterMessage cm = (ClusterMessage) m;
-                            Member node = synchContext.getFrNodeById(cm.getId());
+                            Member node = synchContext.getMemberById(cm.getId());
                             nodes = node == null ? null : node.getAwareIds();
                         }
 
@@ -2510,7 +2419,7 @@ public class SynchHandler extends IoHandlerAdapter {
                 }
             } else {
 
-                if (synchModel) {
+                if (isInclusive) {
 
                     for (int i = 0; i < ids.length; i++) {
 
@@ -2529,18 +2438,11 @@ public class SynchHandler extends IoHandlerAdapter {
 
                                 if (this.mode == SynchMode.SYNCH_MESSAGE) {
 
-                                    nodes = synchContext.getAwareNodes(m.getKey(), m.getVersion());
-
-                                    if (nodes == null || nodes.size() == 0) {
-
-                                        nodes = new HashSet<Short>();
-                                        nodes.add(synchContext.myId);
-                                        synchContext.addAwareNodes(m.getKey(), m.getVersion(), nodes);
-                                    }
+                                    Set<Short> nodes = addAndGetAwareNodesOfMessage(m);
                                 } else {
 
                                     ClusterMessage cm = (ClusterMessage) m;
-                                    Member node = synchContext.getFrNodeById(cm.getId());
+                                    Member node = synchContext.getMemberById(cm.getId());
 
                                     nodes = node == null ? null : node.getAwareIds();
                                 }
@@ -2598,18 +2500,11 @@ public class SynchHandler extends IoHandlerAdapter {
 
                             if (this.mode == SynchMode.SYNCH_MESSAGE) {
 
-                                nodes = synchContext.getAwareNodes(m.getKey(), m.getVersion());
-
-                                if (nodes == null || nodes.size() == 0) {
-
-                                    nodes = new HashSet<Short>();
-                                    nodes.add(synchContext.myId);
-                                    synchContext.addAwareNodes(m.getKey(), m.getVersion(), nodes);
-                                }
+                                Set<Short> nodes = addAndGetAwareNodesOfMessage(m);
                             } else {
 
                                 ClusterMessage cm = (ClusterMessage) m;
-                                Member node = synchContext.getFrNodeById(cm.getId());
+                                Member node = synchContext.getMemberById(cm.getId());
 
                                 nodes = node == null ? null : node.getAwareIds();
                             }
@@ -2686,7 +2581,7 @@ public class SynchHandler extends IoHandlerAdapter {
                 }
             } else {
 
-                if (synchModel) {
+                if (isInclusive) {
 
                     for (int i = 0; i < ids.length; i++) {
 
@@ -2750,18 +2645,11 @@ public class SynchHandler extends IoHandlerAdapter {
 
                         if (this.mode == SynchMode.SYNCH_MESSAGE) {
 
-                            nodes = synchContext.getAwareNodes(m.getKey(), m.getVersion());
-
-                            if (nodes == null || nodes.size() == 0) {
-
-                                nodes = new HashSet<Short>();
-                                nodes.add(synchContext.myId);
-                                synchContext.addAwareNodes(m.getKey(), m.getVersion(), nodes);
-                            }
+                            Set<Short> nodes = addAndGetAwareNodesOfMessage(m);
                         } else {
 
                             ClusterMessage cm = (ClusterMessage) m;
-                            Member node = synchContext.getFrNodeById(cm.getId());
+                            Member node = synchContext.getMemberById(cm.getId());
 
                             nodes = node == null ? null : node.getAwareIds();
                         }

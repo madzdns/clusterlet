@@ -70,7 +70,7 @@ public class ClusterSynchCallback implements ISynchCallbak {
 
         //TODO check if sending Node is invalid in our database and its modification version is higher
 
-        Member subjectNode = synchContext.getFrNodeById(e.getId());
+        Member subjectNode = synchContext.getMemberById(e.getId());
         Member node = null;
 
         if (subjectNode == null) {

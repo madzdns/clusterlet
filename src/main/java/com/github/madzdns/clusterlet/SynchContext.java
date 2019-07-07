@@ -39,7 +39,7 @@ public class SynchContext {
 			messageStore = new EhCacheMessageStore(config.getClusterStorageConfigPath());*/
         clusterStore = new JcsCacheClusterStore(config.getClusterStorageConfigPath());
         messageStore = new JcsCacheMessageStore(config.getClusterStorageConfigPath());
-        Member node = getFrNodeById(myId);
+        Member node = getMemberById(myId);
         if (node == null) {
             final Set<Short> awareIds = new HashSet<Short>();
             node = new Member(myId, null,
@@ -84,7 +84,7 @@ public class SynchContext {
         messageStore.updateAwareNodes(key, version, awareNodes);
     }
 
-    public Member getFrNodeById(short id) {
+    public Member getMemberById(short id) {
         return clusterStore.get(id);
     }
 
@@ -292,7 +292,7 @@ public class SynchContext {
      */
     public boolean resetFrNodeKeyById(short id, String key) {
 
-        Member node = getFrNodeById(id);
+        Member node = getMemberById(id);
 
         if (node != null && key != null) {
 
