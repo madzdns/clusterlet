@@ -353,7 +353,6 @@ public class SynchHandler extends IoHandlerAdapter {
                 MinaSslFilter sslFilter = new MinaSslFilter(ssl, false);
                 session.getFilterChain().addLast(MinaSslFilter.NAME, sslFilter);
             }
-
             session.getFilterChain().addLast("compress_filter",
                     new MinaCompressionFilter());
             session.getFilterChain().addLast("peer_coder",
@@ -374,36 +373,66 @@ public class SynchHandler extends IoHandlerAdapter {
         }
 
         InetSocketAddress peer1 = ((InetSocketAddress) session.getRemoteAddress());
-        link = new StringBuilder(peer1.getAddress().getHostAddress())
-                .append(":")
-                .append(peer1.getPort()).toString();
-
+        link = peer1.getAddress().getHostAddress() + ":" + peer1.getPort();
         session.setAttribute("startupstate", synchContext.isInStartup());
+    }
+
+    private SynchMessage createSimpleResponse(byte messageType,
+                                              Boolean startupStateFromSession,
+                                              SynchMode synchMode) {
+        SynchMessage response = new SynchMessage();
+        response.setId(me.getId());
+        if (startupStateFromSession != null) {
+            response.setInStartup(startupStateFromSession);
+        }
+        response.setSynchMode(synchMode);
+        response.setType(messageType);
+        return response;
+    }
+
+    private boolean getMessagesFromData(IoSession session, IMessage decoded, byte[] data, Set<Short> awareIds, SynchProtocolOutput out) {
+        decoded.deserialize(data);
+        return callbak.callBack(new MinaToISession(session), decoded, awareIds, out);
+    }
+
+    private Set<Short> getAliveMemberIds() {
+        ClusterSnapshot snapshot = synchContext.getSnapshot();
+        if (snapshot != null) {
+            List<Member> cluster = snapshot.getAliveCluster();
+            if (cluster.size() > 0) {
+                Set<Short> nodesForRingUpdate = new HashSet<>();
+                for (Member member : cluster) {
+                    nodesForRingUpdate.add(member.getId());
+                }
+                return nodesForRingUpdate;
+            }
+        }
+        return null;
+    }
+
+    private SynchType getProperRingType(SynchMessage msg) {
+        SynchType type = SynchType.RING_BALANCE;
+        if (msg.getSynchType() == SynchType.RING_QUERIOM ||
+                msg.getSynchType() == SynchType.RING_BALANCE_QUERIOM) {
+            type = SynchType.RING_BALANCE_QUERIOM;
+        }
+        return type;
     }
 
     @Override
     public void messageReceived(IoSession session, Object message)
             throws Exception {
-
         if (!(message instanceof SynchMessage)) {
-
             log.error("Maliformed decoded message!");
             return;
         }
-
         String peer = ((InetSocketAddress) session.getRemoteAddress()).getAddress().getHostAddress();
-
         if (me == null) {
-
             log.error("Could not find myself!");
-
             return;
         }
-
         //XXX here I discarded any possibility of TCP sequence number hacking
-
         SynchMessage msg = (SynchMessage) message;
-
         log.debug("new message received from {} with synch mode {} and Sequence {}",
                 msg.getId(), msg.getSynchMode(), msg.getSequence());
 		/*
@@ -418,43 +447,28 @@ public class SynchHandler extends IoHandlerAdapter {
 		 * The security is on TCP's shoulder.
 		 *
 		if(him == null) {
-
 			him = ClusterSynch.getEdgeInfoSynch(msg.getId());
-
 			if(him==null) {
-
 				log.error("Could not find Edge {} info",msg.getId());
-
 				SynchResponce r = new SynchResponce();
-
 				r.setId(me.getId());
-
 				r.setType(SynchMessage.TYPE_BAD_ID);
-
 				session.write(r);
-
 				r = null;
-
 				session.close(false);
-
 				return;
 			}
 		}*/
 
         if (!starter) {
-            Boolean startupState = (Boolean) session.getAttribute("startupstate");
+            Boolean startupStateFromSession = (Boolean) session.getAttribute("startupstate");
             if (msg.getType() == SynchMessage.TYPE_OK) {
                 log.debug("Returned type OK");
                 session.close(false);
                 return;
-            } else if (msg.isInStartup() && startupState) {
+            } else if (msg.isInStartup() && startupStateFromSession) {
                 log.error("Peer {} and I both were in statup", peer);
-                SynchMessage responce = new SynchMessage();
-                responce.setId(me.getId());
-                responce.setInStartup(startupState);
-                responce.setSynchMode(mode);
-                responce.setType(SynchMessage.TYPE_BOTH_STARTUP);
-                session.write(responce);
+                session.write(createSimpleResponse(SynchMessage.TYPE_BOTH_STARTUP, startupStateFromSession, mode));
                 session.close(false);
                 return;
             } else if (msg.getType() == SynchMessage.TYPE_BAD_ID) {
@@ -467,12 +481,7 @@ public class SynchHandler extends IoHandlerAdapter {
                 return;
             } else if (msg.getSequence() > SynchMessage.SEQ_MAX) {
                 log.error("Too many conversion between peer {}", peer);
-                SynchMessage responce = new SynchMessage();
-                responce.setId(me.getId());
-                responce.setInStartup(startupState);
-                responce.setSynchMode(mode);
-                responce.setType(SynchMessage.TYPE_BAD_SEQ);
-                session.write(responce);
+                session.write(createSimpleResponse(SynchMessage.TYPE_BAD_SEQ, startupStateFromSession, mode));
                 session.close(true);
                 return;
             } else if (msg.getType() == SynchMessage.TYPE_FAILD_RING) {
@@ -491,16 +500,9 @@ public class SynchHandler extends IoHandlerAdapter {
                                     , msg.getKeyChain())) {
                         log.error("Got wrong synch message from {} with wrong keychain:{}", peer, msg.getKeyChain());
                         log.error("my keychain:{}", me.getKeyChain());
-
-                        SynchMessage responce = new SynchMessage();
-                        responce.setId(me.getId());
-                        responce.setInStartup(startupState);
-                        responce.setSynchMode(mode);
-                        responce.setType(SynchMessage.TYPE_BAD_KEY);
-
-                        session.write(responce);
+                        SynchMessage response = createSimpleResponse(SynchMessage.TYPE_BAD_KEY, startupStateFromSession, mode);
+                        session.write(response);
                         session.close(true);
-
                         return;
                     }
                 }
@@ -531,7 +533,6 @@ public class SynchHandler extends IoHandlerAdapter {
                  * synchronizing. So I'm adding that part below. Feel free
                  * to remove this in future if its not necessary
                  */
-
                 /*
                  * TODO
                  * If anybody send me a zone synch while I was not
@@ -547,51 +548,32 @@ public class SynchHandler extends IoHandlerAdapter {
                 }
 
                 if (not_valid_node) {
-
                     log.error("Communicating edge {} is not valid in my database", id);
-
-                    SynchMessage responce = new SynchMessage();
-                    responce.setId(me.getId());
-                    responce.setInStartup(startupState);
-                    responce.setSynchMode(mode);
-                    responce.setType(SynchMessage.TYPE_NOT_VALID_EDGE);
-
+                    SynchMessage responce = createSimpleResponse(SynchMessage.TYPE_NOT_VALID_EDGE, startupStateFromSession, mode);
                     session.write(responce);
                     session.close(false);
-
                     return;
                 }
-
                 //TODO If it is necessary to check cluster here
-
                 Collection<SynchContent> contents = msg.getContents();
-
                 if (log.isDebugEnabled()) {
                     log.debug("Received contents {}", contents);
                 }
-
                 if (contents == null) {
                     log.warn("contents was null fro synch messages from {}", msg.getId());
                     session.close(false);
                     return;
                 }
-
                 Set<SynchContent> responseContents = new HashSet<>();
                 List<IMessage> messagesForRing = new ArrayList<>();
-
-                boolean isRing = msg.getSynchType() == SynchType.RING ||
-                        msg.getSynchType() == SynchType.RING_QUERIOM ||
-                        msg.getSynchType() == SynchType.RING_BALANCE ||
-                        msg.getSynchType() == SynchType.RING_BALANCE_QUERIOM;
+                boolean isRing = SynchType.checkIfRingType(msg.getSynchType());
 
                 Map<String, String> ringMsgToScMap = null;
                 if (isRing) {
-                    ringMsgToScMap = new HashMap<String, String>();
+                    ringMsgToScMap = new HashMap<>();
                 }
 
-                for (Iterator<SynchContent> it = contents.iterator();
-                     it.hasNext(); ) {
-                    SynchContent sc = it.next();
+                for (SynchContent sc : contents) {
                     byte[] m = sc.getContent();
                     if (m == null) {
                         //TODO should not check version and see if its is OK?
@@ -601,11 +583,9 @@ public class SynchHandler extends IoHandlerAdapter {
                     }
 
                     IMessage decoded = this.encoder.newInstance();
-                    decoded.deserialize(m);
                     SynchProtocolOutput out = new SynchProtocolOutput();
-                    boolean result = callbak.callBack(new MinaToISession(session), decoded, sc.getAwareIds(), out);
+                    boolean result = getMessagesFromData(session, decoded, m, sc.getAwareIds(), out);
                     List<IMessage> responses = out.getMessages();
-
                     if (result) {
                         Set<Short> awareNodes = sc.getAwareIds();
                         log.debug("Check if it is ok to store awareIds for message version {}, {}, {}", decoded.getVersion() > -1,
@@ -619,13 +599,11 @@ public class SynchHandler extends IoHandlerAdapter {
                             awareNodes.add(me.getId());
                             synchContext.addAwareNodes(decoded.getKey(), decoded.getVersion(), awareNodes);
                         }
-
                         if (isRing) {
                             messagesForRing.add(decoded);
                             ringMsgToScMap.put(decoded.getKey(), sc.getKey());
                             log.debug("message for ring {} added", decoded.getKey());
                         } else {
-
                             if (responses == null) {
 								/* I decided to not send this sort of situation
 								 * responseContents.add(new SynchContent(sc.getKey(),
@@ -633,7 +611,6 @@ public class SynchHandler extends IoHandlerAdapter {
 										awareNodes, null));*/
                                 continue;
                             }
-
                             for (IMessage response : responses) {
                                 if (response != null) {
                                     responseContents.add(new SynchContent(sc.getKey(), response.getVersion(), awareNodes, response.serialize()));
@@ -641,9 +618,7 @@ public class SynchHandler extends IoHandlerAdapter {
                             }
                         }
                     } else {
-
                         if (responses == null) {
-
                             HashSet<Short> iFaild = new HashSet<Short>();
                             iFaild.add(me.getId());
                             log.debug("it was not synched successfully due to null responce and false result from callback");
@@ -652,13 +627,8 @@ public class SynchHandler extends IoHandlerAdapter {
                                     iFaild, null));
                             continue;
                         }
-
-                        for (Iterator<IMessage> respIt = responses.iterator(); respIt.hasNext(); ) {
-
-                            IMessage response = respIt.next();
-
+                        for (IMessage response : responses) {
                             if (response != null) {
-
                                 responseContents.add(new SynchContent(sc.getKey(), response.getVersion(),
                                         synchContext.getAwareNodes(response.getKey(), response.getVersion()), response.serialize()));
                             }
@@ -667,52 +637,10 @@ public class SynchHandler extends IoHandlerAdapter {
                 }
 
                 Set<Short> nodesForRingUpdate = null;
-
                 if (messagesForRing.size() > 0) {
-
                     ISynchCallbak callBack = this.callbak;
-
-					/*try {
-
-						callBack = this.callbak.getClass().newInstance();
-
-					} catch (Exception e) {
-
-						log.error("", e);
-						SynchMessage m = new SynchMessage();
-						m.setId(me.getId());
-						m.setSynchMode(SynchMode.SYNCH_MESSAGE);
-						m.setType(SynchMessage.TYPE_FAILD_RING);
-
-						session.write(m);
-						session.close(true);
-						return;
-					}*/
-
-                    SynchType type = SynchType.RING_BALANCE;
-
-                    if (msg.getSynchType() == SynchType.RING_QUERIOM ||
-                            msg.getSynchType() == SynchType.RING_BALANCE_QUERIOM) {
-
-                        type = SynchType.RING_BALANCE_QUERIOM;
-                    }
-
-                    ClusterSnapshot snapshot = synchContext.getSnapshot();
-
-                    if (snapshot != null) {
-
-                        List<Member> cluster = snapshot.getAliveCluster();
-
-                        if (cluster.size() > 0) {
-
-                            nodesForRingUpdate = new HashSet<Short>();
-
-                            for (Iterator<Member> it = cluster.iterator(); it.hasNext(); ) {
-
-                                nodesForRingUpdate.add(it.next().getId());
-                            }
-                        }
-                    }
+                    SynchType type = getProperRingType(msg);
+                    nodesForRingUpdate = getAliveMemberIds();
 
                     SynchFeature sf = new SynchHandler(synchContext, type)
                             .withCallBack(callBack)
@@ -723,38 +651,22 @@ public class SynchHandler extends IoHandlerAdapter {
 
                     if (sf == null) {
                         //TODO is this right?
-                        SynchMessage m = new SynchMessage();
-                        m.setId(me.getId());
-                        m.setSynchMode(SynchMode.SYNCH_MESSAGE);
-                        m.setType(SynchMessage.TYPE_FAILD_RING);
+                        SynchMessage m = createSimpleResponse(SynchMessage.TYPE_FAILD_RING,
+                                null, SynchMode.SYNCH_MESSAGE);
                         log.warn("Synch failed due to null SF");
                         session.write(m);
                         session.close(false);
                         return;
                     }
-
-                    Iterator<IMessage> mIt = messagesForRing.iterator();
-
-                    while (mIt.hasNext()) {
-
-                        IMessage m = mIt.next();
-
+                    for (IMessage m : messagesForRing) {
                         SynchResult s = sf.get(m.getKey());
-
                         if (s.isSuccessful()) {
-
                             SynchProtocolOutput out = new SynchProtocolOutput();
-
                             Set<Short> awareIds = synchContext.getAwareNodes(m.getKey(), m.getVersion());
-
                             boolean result = callbak.callBack(new MinaToISession(session), m, awareIds, out);
-
                             List<IMessage> responses = out.getMessages();
-
                             if (result) {
-
                                 if (responses == null) {
-
                                     //means it synched successfully
                                     responseContents.add(new SynchContent(ringMsgToScMap.get(m.getKey()),
                                             m.getVersion(),
@@ -762,9 +674,7 @@ public class SynchHandler extends IoHandlerAdapter {
                                     continue;
                                 }
                             } else {
-
                                 if (responses == null) {
-
                                     Set<Short> n = s.getFaildNodes();
                                     n.add(me.getId());
                                     responseContents.add(new SynchContent(ringMsgToScMap.get(m.getKey()),
@@ -775,17 +685,13 @@ public class SynchHandler extends IoHandlerAdapter {
                             }
 
                             for (Iterator<IMessage> respIt = responses.iterator(); respIt.hasNext(); ) {
-
                                 IMessage response = respIt.next();
-
                                 if (response != null) {
-
                                     responseContents.add(new SynchContent(ringMsgToScMap.get(m.getKey()), response.getVersion(), awareIds,
                                             response.serialize()));
                                 }
                             }
                         } else {
-
                             log.debug("{} was not successfully syched with ring with others. Responcing with faild", m.getKey());
                             //means it was not synched successfully
                             responseContents.add(new SynchContent(ringMsgToScMap.get(m.getKey()), 0,
@@ -801,12 +707,10 @@ public class SynchHandler extends IoHandlerAdapter {
                  * response.setKeyChain(him.getKeyChain());*/
 
                 if (log.isDebugEnabled()) {
-
                     log.debug("Contents {} is being replied to {}", responseContents, msg.getId());
                 }
 
                 if (responseContents.size() == 0) {
-
                     SynchMessage m = new SynchMessage();
                     m.setId(me.getId());
                     m.setSynchMode(SynchMode.SYNCH_MESSAGE);
@@ -826,120 +730,73 @@ public class SynchHandler extends IoHandlerAdapter {
                 m.setSynchType(msg.getSynchType());
 
                 if (isRing && isFirstMessge) {
-
                     m.setExpectedIds(nodesForRingUpdate);
                 }
-
                 session.write(m);
             } else if (msg.getSynchMode() == SynchMode.SYNCH_CLUSTER) {
-
                 /*
                  * First of all we remove startup flag
                  */
                 //TODO I commented this in 14 APR 16
                 //synchContext.inStartup = false;
-
                 Collection<SynchContent> contents = msg.getContents();
-
                 if (contents == null /*|| contents.size == 0*/) {
-
                     log.warn("Received contents was null. closing session");
                     session.close(false);
                     return;
                 }
-
-                boolean isRing = msg.getSynchType() == SynchType.RING ||
-                        msg.getSynchType() == SynchType.RING_QUERIOM ||
-                        msg.getSynchType() == SynchType.RING_BALANCE ||
-                        msg.getSynchType() == SynchType.RING_BALANCE_QUERIOM;
-
+                boolean isRing = SynchType.checkIfRingType(msg.getSynchType());
                 Map<String, String> ringMsgToScMap = null;
-
                 if (isRing) {
-
-                    ringMsgToScMap = new HashMap<String, String>();
+                    ringMsgToScMap = new HashMap<>();
                 }
 
                 ClusterSynchCallback clusterCallback = new ClusterSynchCallback(synchContext);
-
                 Collection<SynchContent> responseContents = new ArrayList<SynchContent>();
-
                 List<IMessage> messagesForRing = new ArrayList<IMessage>();
-
-                for (Iterator<SynchContent> it = contents.iterator();
-                     it.hasNext(); ) {
-
-                    SynchContent sc = it.next();
-
+                for (SynchContent sc : contents) {
                     byte[] m = sc.getContent();
-
                     if (m == null) {
-
                         if (sc.getVersion() > 0) {
-
                             Member node = null;
-
                             try {
-
                                 node = synchContext.getMemberById(Short.parseShort(sc.getKey()));
-
                                 if (node != null) {
-
                                     node.addAwareId(me.getId());
                                     node.addAwareId(msg.getId());
                                 } else {
-
                                     log.error("Wired state!!!!");
                                 }
-
                             } catch (Exception e) {
-
                                 log.error("Error in parsing {}", sc.getKey(), e);
                             }
-
                             continue;
                         }
-
                         log.error("FAILD state!!!!");
                         continue;
                     }
 
                     IMessage decoded = new ClusterMessage();
-
                     decoded.deserialize(m);
-
                     SynchProtocolOutput out = new SynchProtocolOutput();
-
                     boolean result = clusterCallback.callBack(new MinaToISession(session), decoded, sc.getAwareIds(), out);
-
                     List<IMessage> responses = out.getMessages();
-
                     if (result) {
-
                         if (isRing) {
-
                             messagesForRing.add(decoded);
                             ringMsgToScMap.put(decoded.getKey(), sc.getKey());
                         }
                     }
 
                     if (responses != null) {
-
-                        for (Iterator<IMessage> respIt = responses.iterator(); respIt.hasNext(); ) {
-
-                            ClusterMessage response = (ClusterMessage) respIt.next();
-
+                        for (IMessage respons : responses) {
+                            ClusterMessage response = (ClusterMessage) respons;
                             if (response != null) {
-
                                 Member node = synchContext.getMemberById(response.getId());
-
                                 Set<Short> awareIds = null;
-
                                 if (node != null) {
-
                                     awareIds = node.getAwareIds();
                                 }
-
                                 responseContents.add(new SynchContent(sc.getKey(), response.getVersion(), awareIds,
                                         response.serialize()));
                             }
@@ -948,36 +805,22 @@ public class SynchHandler extends IoHandlerAdapter {
                 }
 
                 Set<Short> nodesForRingUpdate = null;
-
                 if (messagesForRing.size() > 0) {
-
                     if (log.isDebugEnabled()) {
-
                         log.debug("Starting to update messages {} for ring", messagesForRing);
                     }
-
                     ISynchCallbak callBack = this.callbak;
-
                     SynchType type = SynchType.RING_BALANCE;
-
                     if (msg.getSynchType() == SynchType.RING_QUERIOM ||
                             msg.getSynchType() == SynchType.RING_BALANCE_QUERIOM) {
-
                         type = SynchType.RING_BALANCE_QUERIOM;
                     }
-
                     ClusterSnapshot snapshot = synchContext.getSnapshot();
-
                     if (snapshot != null) {
-
                         List<Member> cluster = snapshot.getAliveCluster();
-
                         if (cluster.size() > 0) {
-
                             nodesForRingUpdate = new HashSet<Short>();
-
                             for (Iterator<Member> it = cluster.iterator(); it.hasNext(); ) {
-
                                 nodesForRingUpdate.add(it.next().getId());
                             }
                         }
@@ -1005,40 +848,25 @@ public class SynchHandler extends IoHandlerAdapter {
                     }
 
                     Iterator<IMessage> mIt = messagesForRing.iterator();
-
                     while (mIt.hasNext()) {
-
                         IMessage m = mIt.next();
-
                         SynchResult s = sf.get(m.getKey());
-
 						/*if(s == null) {
-
 							//In the case of balance, there might be some messages gets omitted
 							continue;
 						}*/
 
                         if (s.isSuccessful()) {
-
                             SynchProtocolOutput out = new SynchProtocolOutput();
-
                             Member node = synchContext.getMemberById(((ClusterMessage) m).getId());
-
                             Set<Short> awareIds = null;
-
                             if (node != null) {
-
                                 awareIds = node.getAwareIds();
                             }
-
                             boolean result = clusterCallback.callBack(new MinaToISession(session), m, awareIds, out);
-
                             List<IMessage> responses = out.getMessages();
-
                             if (result) {
-
                                 if (responses == null) {
-
                                     //means it synched successfully
                                     responseContents.add(new SynchContent(ringMsgToScMap.get(m.getKey()),
                                             m.getVersion(),
@@ -1046,9 +874,7 @@ public class SynchHandler extends IoHandlerAdapter {
                                     continue;
                                 }
                             } else {
-
                                 if (responses == null) {
-
                                     Set<Short> n = s.getFaildNodes();
                                     n.add(me.getId());
                                     responseContents.add(new SynchContent(ringMsgToScMap.get(m.getKey()),
@@ -1059,26 +885,18 @@ public class SynchHandler extends IoHandlerAdapter {
                             }
 
                             for (Iterator<IMessage> respIt = responses.iterator(); respIt.hasNext(); ) {
-
                                 IMessage response = respIt.next();
-
                                 if (response != null) {
-
                                     node = synchContext.getMemberById(((ClusterMessage) response).getId());
-
                                     awareIds = null;
-
                                     if (node != null) {
-
                                         awareIds = node.getAwareIds();
                                     }
-
                                     responseContents.add(new SynchContent(ringMsgToScMap.get(m.getKey()), response.getVersion(), awareIds,
                                             response.serialize()));
                                 }
                             }
                         } else {
-
                             //means it was not synched successfully
                             responseContents.add(new SynchContent(ringMsgToScMap.get(m.getKey()), 0,
                                     s.getFaildNodes(), null));
@@ -1088,12 +906,10 @@ public class SynchHandler extends IoHandlerAdapter {
                 }
 
                 if (log.isDebugEnabled()) {
-
                     log.debug("Response with contents {} to {}", responseContents, msg.getId());
                 }
 
                 if (responseContents.size() == 0) {
-
                     SynchMessage m = new SynchMessage();
                     m.setId(me.getId());
                     m.setSynchMode(SynchMode.SYNCH_CLUSTER);
@@ -1101,7 +917,6 @@ public class SynchHandler extends IoHandlerAdapter {
                     m.setSequence((byte) 0);
                     m.setSynchType(msg.getSynchType());
                     session.write(m);
-
                     return;
                 }
 
@@ -1112,142 +927,93 @@ public class SynchHandler extends IoHandlerAdapter {
                 m.setContents(responseContents);
                 m.setSequence((byte) (msg.getSequence() + 1));
                 m.setSynchType(msg.getSynchType());
-
                 if (isRing && isFirstMessge) {
-
                     m.setExpectedIds(nodesForRingUpdate);
                 }
-
                 session.write(m);
-
                 if (log.isDebugEnabled()) {
-
                     log.debug("Message responded with contents {}, type {}, sequence {}", responseContents, m.getType(), m.getSequence());
                 }
             }
         } else {
-
             SynchSession synch = (SynchSession) session.getAttribute("SynchSession");
-
             boolean isRing = this.synch == SynchType.RING ||
                     this.synch == SynchType.RING_QUERIOM ||
                     this.synch == SynchType.RING_BALANCE ||
                     this.synch == SynchType.RING_BALANCE_QUERIOM;
-
             if (isRing) {
-
                 if (log.isDebugEnabled()) {
-
                     log.debug("Remote node knew nodes {}", msg.getExpectedIds());
                 }
-
                 if (msg.getExpectedIds() != null) {
-
                     this.expectedNodes.removeAll(msg.getExpectedIds());
                 } else {
-
                     this.expectedNodes.remove(msg.getId());
                 }
             }
 
             if (msg.getType() == SynchMessage.TYPE_OK) {
-
                 numberOfTrieds++;
                 createResult();
-
                 session.setAttribute("planned_close");
                 session.close(false);
-
                 return;
             } else if (msg.getType() == SynchMessage.TYPE_BOTH_STARTUP) {
-
                 log.warn("Got TYPE_BOTH_STARTUP synch responce from {} ", peer);
-
                 workCallback(synch, STATE_UNPROPER, link);
-
                 return;
             } else if (msg.getType() == SynchMessage.TYPE_NOT_VALID_EDGE) {
-
                 log.warn("Got TYPE_NOT_VALID_EDGE synch responce from {} ", peer);
-
                 workCallback(synch, STATE_UNPROPER, link);
-
                 return;
             } else if (msg.getType() == SynchMessage.TYPE_BAD_ID) {
-
                 log.warn("Got TYPE_BAD_ID synch responce from {} ", peer);
-
                 workCallback(synch, STATE_UNPROPER, link);
-
                 return;
             } else if (msg.getType() == SynchMessage.TYPE_BAD_SEQ) {
-
                 log.warn("Got TYPE_BAD_SEQ synch responce from {}", peer);
-
                 workCallback(synch, STATE_UNPROPER, link);
-
                 return;
             } else if (msg.getType() == SynchMessage.TYPE_BAD_KEY) {
-
                 log.warn("Got BAD_KEY synch responce from {} my key chain of him was:{}", peer, synch.getFrNode().getKeyChain());
-
                 workCallback(synch, STATE_UNPROPER, link);
-
                 session.setAttribute("planned_close");
                 session.close(false);
-
                 return;
             }
-
             if (msg.getSequence() > SynchMessage.SEQ_MAX) {
-
                 log.warn("Too many conversion between peer {}", peer);
-
                 SynchMessage responce = new SynchMessage();
                 responce.setId(me.getId());
                 responce.setInStartup(startupState);
                 responce.setSynchMode(mode);
                 responce.setType(SynchMessage.TYPE_BAD_SEQ);
-
                 session.write(responce);
-
                 session.setAttribute("planned_close");
                 session.close(false);
-
                 workCallback(synch, STATE_UNPROPER, link);
-
                 return;
             }
 
             if (msg.getType() == SynchMessage.TYPE_FAILD_RING) {
-
                 log.warn("Got TYPE_FAILD_RING synch responce from {} ", peer);
-
                 workCallback(synch, STATE_UNPROPER, link);
-
                 session.setAttribute("planned_close");
                 session.close(false);
-
                 return;
             }
 
             if (msg.getSynchMode() == SynchMode.SYNCH_MESSAGE) {
-
                 Collection<SynchContent> contents = msg.getContents();
-
                 if (contents == null) {
-
                     log.warn("Wrong state - RCVD contents should not be null");
-
 					/*
 					 * I think it is wrong to put these to line in here
 					 * so I replaced them with workCallback()
 					 * numberOfTrieds ++;
 					createResult();*/
-
                     session.setAttribute("planned_close");
                     session.close(false);
-
                     workCallback(synch, STATE_UNPROPER, link);
                     return;
                 }
@@ -2400,7 +2166,7 @@ public class SynchHandler extends IoHandlerAdapter {
                         IMessage m = it.next();
                         Set<Short> nodes = null;
                         if (this.mode == SynchMode.SYNCH_MESSAGE) {
-                            Set<Short> nodes = addAndGetAwareNodesOfMessage(m);
+                            nodes = addAndGetAwareNodesOfMessage(m);
                         } else {
                             ClusterMessage cm = (ClusterMessage) m;
                             Member node = synchContext.getMemberById(cm.getId());
@@ -2437,8 +2203,7 @@ public class SynchHandler extends IoHandlerAdapter {
                                 Set<Short> nodes = null;
 
                                 if (this.mode == SynchMode.SYNCH_MESSAGE) {
-
-                                    Set<Short> nodes = addAndGetAwareNodesOfMessage(m);
+                                    nodes = addAndGetAwareNodesOfMessage(m);
                                 } else {
 
                                     ClusterMessage cm = (ClusterMessage) m;
@@ -2499,8 +2264,7 @@ public class SynchHandler extends IoHandlerAdapter {
                             Set<Short> nodes = null;
 
                             if (this.mode == SynchMode.SYNCH_MESSAGE) {
-
-                                Set<Short> nodes = addAndGetAwareNodesOfMessage(m);
+                                nodes = addAndGetAwareNodesOfMessage(m);
                             } else {
 
                                 ClusterMessage cm = (ClusterMessage) m;
@@ -2644,8 +2408,7 @@ public class SynchHandler extends IoHandlerAdapter {
                         Set<Short> nodes = null;
 
                         if (this.mode == SynchMode.SYNCH_MESSAGE) {
-
-                            Set<Short> nodes = addAndGetAwareNodesOfMessage(m);
+                            nodes = addAndGetAwareNodesOfMessage(m);
                         } else {
 
                             ClusterMessage cm = (ClusterMessage) m;

@@ -179,7 +179,6 @@ public class SynchContext {
      * @return false
      */
     public boolean isFullySynched(String key) {
-
         return false;
     }
 
@@ -192,7 +191,6 @@ public class SynchContext {
      * @return false
      */
     public boolean isQueriumSynched(String key) {
-
         return false;
     }
 
@@ -200,47 +198,31 @@ public class SynchContext {
      * @return a snapshot of current node in the cluster
      */
     public ClusterSnapshot getSnapshot() {
-
         /*
          * Only where validCluster is changed
          * is in updateClusterWlock that is a WLocked method, so it
          * is completely safe doing this here
          */
-
-        if (snapshot != null)
-
+        if (snapshot != null) {
             return snapshot;
+        }
 
         final ClusterSnapshot tmpMonitor = new ClusterSnapshot();
-
-        clusterStore.iterator(new IClusterStoreIteratorCallback() {
-
-            @Override
-            public void next(Member node) {
-
-                if (node.isValid()) {
-
-                    tmpMonitor.validClusterIDs.add(node.getId());
-
-                    tmpMonitor.validCluster.add(node);
-
-                    tmpMonitor.aliveCluster.add(node);
-                } else if (!node.isDown()) {
-
-                    tmpMonitor.aliveCluster.add(node);
-
-                    if (node.getId() != myId)
-
-                        tmpMonitor.inValidClusterIDs.add(node.getId());
-                } else if (node.getId() != myId) {
-
+        clusterStore.iterator(node -> {
+            if (node.isValid()) {
+                tmpMonitor.validClusterIDs.add(node.getId());
+                tmpMonitor.validCluster.add(node);
+                tmpMonitor.aliveCluster.add(node);
+            } else if (!node.isDown()) {
+                tmpMonitor.aliveCluster.add(node);
+                if (node.getId() != myId) {
                     tmpMonitor.inValidClusterIDs.add(node.getId());
                 }
-
-                tmpMonitor.cluster.add(node);
-
-                tmpMonitor.idClusterMap.put(node.getId(), node);
+            } else if (node.getId() != myId) {
+                tmpMonitor.inValidClusterIDs.add(node.getId());
             }
+            tmpMonitor.cluster.add(node);
+            tmpMonitor.idClusterMap.put(node.getId(), node);
         });
 
         /*
@@ -249,25 +231,20 @@ public class SynchContext {
          * clusterMeta has no elements, once it gets an element,
          * invalidates clusterMonitor
          */
-
         return snapshot = tmpMonitor;
     }
 
     private void invalidateMonitor() {
 
-        if (snapshot == null)
-
+        if (snapshot == null) {
             return;
-
+        }
         //this invalidates previous validCluster, So they need to calculate new one
-
         snapshot.invalidateMonitor();
-
         snapshot = null;
     }
 
     void synchronizedStateChange(Member node, byte state) {
-
         node.setState(state);
         invalidateMonitor();
         virtualLastModified = new Date().getTime();
@@ -277,7 +254,6 @@ public class SynchContext {
      * @return a @see Member of local node
      */
     public Member getMyInfo() {
-
         return clusterStore.get(myId);
     }
 
@@ -291,33 +267,25 @@ public class SynchContext {
      * @return true if it was ok
      */
     public boolean resetFrNodeKeyById(short id, String key) {
-
         Member node = getMemberById(id);
-
         if (node != null && key != null) {
-
             if (!node.isValid()) {
-
                 throw new IllegalStateException("Node is disabld");
             }
 
             /*
              * I don't think its possible e.getKey() returns null
              */
-            if (node.getKey().equals(key))
-
+            if (node.getKey().equals(key)) {
                 return true;
-
+            }
             node.resetKey(key);
-
             clusterStore.update(node);
         }
-
         return false;
     }
 
     boolean isInStartup() {
-
         return this.inStartup;
     }
 
@@ -325,12 +293,10 @@ public class SynchContext {
      * @return a timestamp of last time cluster was modified
      */
     public long getClusterLastModified() {
-
         return virtualLastModified;
     }
 
     void setVirtualLastModified(long virtualLastModified) {
-
         this.virtualLastModified = virtualLastModified;
     }
 
@@ -338,8 +304,6 @@ public class SynchContext {
      * @return config of this context
      */
     public SynchConfig getConfig() {
-
         return config;
     }
-
 }

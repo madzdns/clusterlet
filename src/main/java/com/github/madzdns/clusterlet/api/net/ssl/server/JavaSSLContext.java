@@ -23,43 +23,27 @@ public class JavaSSLContext {
 	public static SSLContext getSSLcontextFactory(String keyStorePath, String trustStorePath, 
 			String keyStorePassword, String trustStorePassword, 
 			String keyStorePassword2nd) throws Exception {
-		
-		
-		String keystore = keyStorePath;
-		
-		String truststore = trustStorePath;
-		
 		KEYSTORE_PASSWORD = keyStorePassword;
-		
 		TRUSTSTORE_PASSWORD = trustStorePassword;
-		
 		KEYSTORE_PASSWORD_2ND = keyStorePassword2nd;
-		
-		File keyStoreFile = new File(keystore);
-		File trustStoreFile = new File(truststore);
-
+		File keyStoreFile = new File(keyStorePath);
+		File trustStoreFile = new File(trustStorePath);
 		if (keyStoreFile.exists() && trustStoreFile.exists()) {
-			
 			// First initialize the key and trust material
 			KeyStore ksKeys = KeyStore.getInstance("JKS");
 			ksKeys.load(new FileInputStream(keyStoreFile), KEYSTORE_PASSWORD.toCharArray());
 			KeyStore ksTrust = KeyStore.getInstance("JKS");
 			ksTrust.load(new FileInputStream(trustStoreFile), TRUSTSTORE_PASSWORD.toCharArray());
-
 			// KeyManagers decide which key material to use
 			KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
 			kmf.init(ksKeys, KEYSTORE_PASSWORD_2ND.toCharArray());
-
 			// TrustManagers decide whether to allow connections
 			TrustManagerFactory tmf = TrustManagerFactory.getInstance("SunX509");
 			tmf.init(ksTrust);
-
 			SSLContext sslContext = SSLContext.getInstance("TLS");
 			sslContext.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
-			
 			return sslContext;
 		}
-		
 		return null;
 	}
 }
