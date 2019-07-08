@@ -93,8 +93,8 @@ public interface IMessage extends IEncoder, IDecoder {
 	long getVersion();
 }
 ```
-Every message should define `equals` and `hashCode` methods and have default constructor
-with no arguments.
+For Every message `equals` and `hashCode` methods should be defined and make sure
+to have a default constructor with no arguments.
 Each message is identified with the `key` value. For messages with identical `key`
 values, version becomes important.
 
