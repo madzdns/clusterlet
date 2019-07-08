@@ -1,8 +1,8 @@
 # What is Clusterlet?
 
-Clusterlet is a `Java` library to let you manage A to Z of a `cluster`
+Clusterlet is a `Java` library. It let you manage A to Z of a `cluster`
 
-* It helps you to discover other cluster members, Add or remove members, detect dead or unhealthy members and so on.
+* It helps you to discover other cluster members, add or remove members, detect dead or unhealthy members and so on.
 * It also helps you to communicate between cluster members with sending (bulk) messages.
 * It keeps track of messages and is capable of resolving conflicts between message versions
 * It also gives reports related to the state and health of the cluster.
@@ -13,7 +13,7 @@ Clusterlet is a `Java` library to let you manage A to Z of a `cluster`
 * It handles cluster startup for failing or restarted members
 * It is a library so can simply be embedded in any java application
   
-So... Bring up you're cluster, discover them and start sending messages    
+So... Bring up you're cluster, discover the members and start sending messages    
 
 [MadzDNS cluster](https://github.com/madzdns/cluster) is a proof of concept for this library
 
@@ -62,10 +62,10 @@ public interface ISyncCallback {
     void result(SyncFuture syncFeature);
 }
 ```
-Clusterlet calls the `callBack` method of this callback for every receiving message
-and acts based on the return value updates its indexing database and informs the 
+Clusterlet calls the `callBack` method for every receiving message
+and acts based on the return value. Updates its indexing database and informs the 
 sending member about the result. It is obvious that a value of `true` means ok and
-`false` mean failure. Following is simplest `ISyncCallback` implementation ever!
+`false` mean failure. Following is the simplest `ISyncCallback` implementation ever!
 
 ```java
 private static class SyncCallback implements ISyncCallback {
