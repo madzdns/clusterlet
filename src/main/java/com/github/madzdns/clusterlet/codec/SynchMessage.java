@@ -1,6 +1,6 @@
 package com.github.madzdns.clusterlet.codec;
 
-import com.github.madzdns.clusterlet.SynchType;
+import com.github.madzdns.clusterlet.SyncType;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.DataInputStream;
@@ -56,7 +56,7 @@ public class SynchMessage implements ISynchMessage {
     private SynchMode synchMode = SynchMode.SYNCH_CLUSTER;
     private boolean inStartup = false;
     private List<SynchContent> contents;
-    private SynchType synchType = SynchType.UNICAST;
+    private SyncType syncType = SyncType.UNICAST;
     private Set<Short> expectedIds = null;
 
     public SynchMessage() {
@@ -127,12 +127,12 @@ public class SynchMessage implements ISynchMessage {
         this.contents.add(content);
     }
 
-    public SynchType getSynchType() {
-        return synchType;
+    public SyncType getSyncType() {
+        return syncType;
     }
 
-    public void setSynchType(SynchType synchType) {
-        this.synchType = synchType;
+    public void setSyncType(SyncType syncType) {
+        this.syncType = syncType;
     }
 
     public Set<Short> getExpectedIds() {
@@ -157,7 +157,7 @@ public class SynchMessage implements ISynchMessage {
             synchMode = SynchMode.SYNCH_MESSAGE;
         }
         mode = in.readByte();
-        synchType = SynchType.getByValue(mode);
+        syncType = SyncType.getByValue(mode);
         int len = in.readByte();
         if (len > 0) {
             keyChain = new ArrayList<>();
@@ -213,7 +213,7 @@ public class SynchMessage implements ISynchMessage {
         out.writeByte(sequence);
         out.writeBoolean(inStartup);
         out.writeByte(synchMode.getMode());
-        out.writeByte(synchType.getValue());
+        out.writeByte(syncType.getValue());
         List<String> keys = getKeyChain();
         if (keys != null) {
             out.writeByte(keys.size());

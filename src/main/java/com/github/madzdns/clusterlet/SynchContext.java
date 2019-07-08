@@ -66,10 +66,10 @@ public class SynchContext {
      * After creating a SynchHandler using this method, messges can be sent
      * to cluster
      *
-     * @param type is of type @see SynchType
+     * @param type is of type @see SyncType
      * @return a client instance of @see SynchHandler
      */
-    public SynchHandler make(SynchType type) {
+    public SynchHandler make(SyncType type) {
         SynchHandler s = new SynchHandler(this, type);
         inStartup = false;
         return s;
@@ -120,7 +120,7 @@ public class SynchContext {
      * @return true if it was synched with cluster
      */
     public boolean synchCluster(Member node) {
-        return synchCluster(node, SynchType.UNICAST_BALANCE);
+        return synchCluster(node, SyncType.UNICAST_BALANCE);
     }
 
     /**
@@ -130,10 +130,10 @@ public class SynchContext {
      * as synchronising method
      *
      * @param node     node of type @see Member
-     * @param withType of type @SynchType
+     * @param withType of type @SyncType
      * @return true if it was synched with cluster
      */
-    public boolean synchCluster(Member node, SynchType withType) {
+    public boolean synchCluster(Member node, SyncType withType) {
         if (node == null) {
             return false;
         }

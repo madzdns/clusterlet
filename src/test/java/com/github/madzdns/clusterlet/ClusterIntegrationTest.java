@@ -19,7 +19,6 @@ import java.util.Date;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
-import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -29,6 +28,8 @@ public class ClusterIntegrationTest {
     final static String clusterFile2 = "cluster_file_2";
     final static String messageToSend = "Ohoy";
     final static String messageToSendKey = "OhoyKey";
+    SynchServer syncServer1 = null;
+    SynchServer syncServer2 = null;
 
     @Getter
     @Setter
@@ -110,6 +111,12 @@ public class ClusterIntegrationTest {
     public void afterEach() {
         assertTrue(new File(clusterFile1).delete());
         assertTrue(new File(clusterFile2).delete());
+        if (syncServer1 != null) {
+            syncServer1.stop();
+        }
+        if (syncServer2 != null) {
+            syncServer2.stop();
+        }
     }
 
     @Test
@@ -128,7 +135,8 @@ public class ClusterIntegrationTest {
             Bind syncBinding = new Bind();
             syncBinding.setSockets(Collections.singletonList(new Socket("localhost:12346")));
             try {
-                new SynchServer(handler, syncBinding).start();
+                syncServer1 = new SynchServer(handler, syncBinding);
+                syncServer1.start();
                 startUpLatch.countDown();
             } catch (IOException e) {
                 fail();
@@ -150,7 +158,8 @@ public class ClusterIntegrationTest {
             Bind syncBinding = new Bind();
             syncBinding.setSockets(Collections.singletonList(new Socket("localhost:12347")));
             try {
-                new SynchServer(handler, syncBinding).start();
+                syncServer2 = new SynchServer(handler, syncBinding);
+                syncServer2.start();
                 startUpLatch.countDown();
             } catch (IOException e) {
                 fail();
@@ -172,7 +181,7 @@ public class ClusterIntegrationTest {
         final Set<Short> awareIds = null;//This new member is not aware of other nodes
         final byte state = Member.STATE_VLD;//To delete use Member.STATE_DEL
         Member member = new Member(memberId, syncAddresses, useSsl, authByKey, key, lastModified, awareIds, state);
-        assertTrue(context1.synchCluster(member, SynchType.RING));
+        assertTrue(context1.synchCluster(member, SyncType.RING));
         ClusterSnapshot cs = context2.getSnapshot();
         assertNotNull(cs.getCluster());
         assertEquals(2, cs.getCluster().size(), "Now member 2 should have 2 alive members in its snapshot");
@@ -204,7 +213,8 @@ public class ClusterIntegrationTest {
             Bind syncBinding = new Bind();
             syncBinding.setSockets(Collections.singletonList(new Socket("localhost:12346")));
             try {
-                new SynchServer(handler, syncBinding).start();
+                syncServer1 = new SynchServer(handler, syncBinding);
+                syncServer1.start();
                 startUpLatch.countDown();
             } catch (IOException e) {
                 fail();
@@ -227,7 +237,8 @@ public class ClusterIntegrationTest {
             Bind syncBinding = new Bind();
             syncBinding.setSockets(Collections.singletonList(new Socket("localhost:12347")));
             try {
-                new SynchServer(handler, syncBinding).start();
+                syncServer2 = new SynchServer(handler, syncBinding);
+                syncServer2.start();
                 startUpLatch.countDown();
             } catch (IOException e) {
                 fail();
@@ -250,7 +261,7 @@ public class ClusterIntegrationTest {
         final Set<Short> awareIds = null;//This new member is not aware of other nodes
         final byte state = Member.STATE_VLD;//To delete use Member.STATE_DEL
         Member member = new Member(memberId, syncAddresses, useSsl, authByKey, key, lastModified, awareIds, state);
-        assertTrue(context1.synchCluster(member, SynchType.RING));
+        assertTrue(context1.synchCluster(member, SyncType.RING));
         ClusterSnapshot cs = context2.getSnapshot();
         assertNotNull(cs.getCluster());
         assertEquals(2, cs.getCluster().size(), "Now member 2 should have 2 alive members in its snapshot");
@@ -258,7 +269,7 @@ public class ClusterIntegrationTest {
         assertEquals(2, cs.getAliveCluster().size());
         //Now sending message from member 2 to others with ring synchronization type
         MyMessage messageFromMember2 = new MyMessage(messageToSendKey, new Date().getTime(), messageToSend);
-        SynchFeature feature = context2.make(SynchType.RING)
+        SynchFeature feature = context2.make(SyncType.RING)
                 .withoutCluster(memberId2)//Dont send to member 2 again
                 .withCallBack(new SyncCallback((session, message, withNodes, out) -> {
                     assertTrue(message instanceof MyMessage);
@@ -300,7 +311,8 @@ public class ClusterIntegrationTest {
             Bind syncBinding = new Bind();
             syncBinding.setSockets(Collections.singletonList(new Socket("localhost:12346")));
             try {
-                new SynchServer(handler, syncBinding).start();
+                syncServer1 = new SynchServer(handler, syncBinding);
+                syncServer1.start();
                 startUpLatch.countDown();
             } catch (IOException e) {
                 fail();
@@ -323,7 +335,8 @@ public class ClusterIntegrationTest {
             Bind syncBinding = new Bind();
             syncBinding.setSockets(Collections.singletonList(new Socket("localhost:12347")));
             try {
-                new SynchServer(handler, syncBinding).start();
+                syncServer2 = new SynchServer(handler, syncBinding);
+                syncServer2.start();
                 startUpLatch.countDown();
             } catch (IOException e) {
                 fail();
@@ -346,7 +359,7 @@ public class ClusterIntegrationTest {
         final Set<Short> awareIds = null;//This new member is not aware of other nodes
         final byte state = Member.STATE_VLD;//To delete use Member.STATE_DEL
         Member member = new Member(memberId, syncAddresses, useSsl, authByKey, key, lastModified, awareIds, state);
-        assertTrue(context1.synchCluster(member, SynchType.RING));
+        assertTrue(context1.synchCluster(member, SyncType.RING));
         ClusterSnapshot cs = context2.getSnapshot();
         assertNotNull(cs.getCluster());
         assertEquals(2, cs.getCluster().size(), "Now member 2 should have 2 alive members in its snapshot");
@@ -354,7 +367,7 @@ public class ClusterIntegrationTest {
         assertEquals(2, cs.getAliveCluster().size());
         //Now sending message from member 2 to others with ring synchronization type
         MyMessage messageFromMember2 = new MyMessage(messageToSendKey, new Date().getTime(), messageToSend);
-        SynchFeature feature = context2.make(SynchType.RING)
+        SynchFeature feature = context2.make(SyncType.RING)
                 .withoutCluster(memberId2)//Dont send to member 2 again
                 .withCallBack(new SyncCallback((session, message, withNodes, out) -> {
                     assertTrue(message instanceof MyMessage);

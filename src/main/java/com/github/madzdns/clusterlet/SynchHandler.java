@@ -42,7 +42,7 @@ public class SynchHandler extends IoHandlerAdapter {
     public final static byte STATE_UNPROPER = 2;
 
     boolean isSender;
-    private SynchType synch;
+    private SyncType synch;
     private ISynchCallbak callbak;
     private short[] ids = null;
     SynchMode mode = SynchMode.SYNCH_MESSAGE;
@@ -79,7 +79,7 @@ public class SynchHandler extends IoHandlerAdapter {
         this.me = ctx.getMyInfo();
     }
 
-    SynchHandler(SynchContext ctx, SynchType synch) {
+    SynchHandler(SynchContext ctx, SyncType synch) {
         this.isSender = true;
         this.synch = synch;
         this.synchContext = ctx;
@@ -206,7 +206,7 @@ public class SynchHandler extends IoHandlerAdapter {
             return this;
         }
 
-        if (SynchType.checkIfBalanceType(this.synch)) {
+        if (SyncType.checkIfBalanceType(this.synch)) {
             if (!this.withBalance) {
                 synchWithBalance(msg);
                 return this;
@@ -214,7 +214,7 @@ public class SynchHandler extends IoHandlerAdapter {
         }
         List<Member> cluster = snapshot.getAliveCluster();
         sessions = new ArrayList<>();
-        if (SynchType.checkIfUnicastType(this.synch)) {
+        if (SyncType.checkIfUnicastType(this.synch)) {
             if (ids == null || ids.length == 0) {
                 if (checkWithBalanceAndSetCallback()) {
                     return this;
@@ -241,7 +241,7 @@ public class SynchHandler extends IoHandlerAdapter {
                     this.ids = ArrayUtils.toPrimitive(idss.toArray(new Short[0]));
                 }
             }
-        } else if (SynchType.checkIfRingType(this.synch)) {
+        } else if (SyncType.checkIfRingType(this.synch)) {
             if (ids == null || ids.length == 0) {
                 if (checkWithBalanceAndSetCallback()) {
                     return this;
@@ -277,7 +277,7 @@ public class SynchHandler extends IoHandlerAdapter {
 
         startupState = synchContext.isInStartup();
         SynchMessage message = new SynchMessage();
-        message.setSynchType(synch);
+        message.setSyncType(synch);
         message.setId(me.getId());
         message.setInStartup(startupState);
         message.setSynchMode(mode);
@@ -309,10 +309,10 @@ public class SynchHandler extends IoHandlerAdapter {
         }
 
         if (sessions != null && sessions.size() > 0) {
-            if (SynchType.checkIfRingType(synch) ||
-                    synch == SynchType.UNICAST_ONE_OF) {
+            if (SyncType.checkIfRingType(synch) ||
+                    synch == SyncType.UNICAST_ONE_OF) {
                 sessions.get(0).sendMsg(message);
-            } else if (SynchType.checkIfUnicastType(synch)) {
+            } else if (SyncType.checkIfUnicastType(synch)) {
                 for (SynchSession s : sessions) {
                     s.sendMsg(message);
                 }
@@ -406,10 +406,10 @@ public class SynchHandler extends IoHandlerAdapter {
     private SynchMessage createCompleteResponse(byte messageType,
                                                 Boolean startupStateFromSession,
                                                 SynchMode synchMode,
-                                                SynchType synchType,
+                                                SyncType syncType,
                                                 Byte sequence) {
         SynchMessage response = createSimpleResponse(messageType, startupStateFromSession, synchMode);
-        response.setSynchType(synchType);
+        response.setSyncType(syncType);
         if (sequence > -1) {
             response.setSequence(sequence);
         }
@@ -450,11 +450,11 @@ public class SynchHandler extends IoHandlerAdapter {
         return null;
     }
 
-    private SynchType getProperRingType(SynchMessage msg) {
-        SynchType type = SynchType.RING_BALANCE;
-        if (msg.getSynchType() == SynchType.RING_QUERIOM ||
-                msg.getSynchType() == SynchType.RING_BALANCE_QUERIOM) {
-            type = SynchType.RING_BALANCE_QUERIOM;
+    private SyncType getProperRingType(SynchMessage msg) {
+        SyncType type = SyncType.RING_BALANCE;
+        if (msg.getSyncType() == SyncType.RING_QUERIOM ||
+                msg.getSyncType() == SyncType.RING_BALANCE_QUERIOM) {
+            type = SyncType.RING_BALANCE_QUERIOM;
         }
         return type;
     }
@@ -527,7 +527,7 @@ public class SynchHandler extends IoHandlerAdapter {
         }
         Set<SynchContent> responseContents = new HashSet<>();
         List<IMessage> messagesForRing = new ArrayList<>();
-        boolean isRing = SynchType.checkIfRingType(msg.getSynchType());
+        boolean isRing = SyncType.checkIfRingType(msg.getSyncType());
 
         Map<String, String> ringMsgToScMap = null;
         if (isRing) {
@@ -600,7 +600,7 @@ public class SynchHandler extends IoHandlerAdapter {
         Set<Short> membersForRingUpdate = null;
         if (messagesForRing.size() > 0) {
             ISynchCallbak callBack = this.callbak;
-            SynchType type = getProperRingType(msg);
+            SyncType type = getProperRingType(msg);
             membersForRingUpdate = getAliveMemberIds();
 
             SynchFeature sf = new SynchHandler(synchContext, type)
@@ -656,12 +656,12 @@ public class SynchHandler extends IoHandlerAdapter {
         }
 
         if (responseContents.size() == 0) {
-            SynchMessage m = createCompleteResponse(SynchMessage.TYPE_OK, null, SynchMode.SYNCH_MESSAGE, msg.getSynchType(), (byte) 0);
+            SynchMessage m = createCompleteResponse(SynchMessage.TYPE_OK, null, SynchMode.SYNCH_MESSAGE, msg.getSyncType(), (byte) 0);
             session.write(m);
             return;
         }
 
-        SynchMessage m = createCompleteResponse(SynchMessage.TYPE_CHECK, null, SynchMode.SYNCH_MESSAGE, msg.getSynchType(), (byte) (msg.getSequence() + 1));
+        SynchMessage m = createCompleteResponse(SynchMessage.TYPE_CHECK, null, SynchMode.SYNCH_MESSAGE, msg.getSyncType(), (byte) (msg.getSequence() + 1));
         m.setContents(responseContents);
         if (isRing && isFirstMessage) {
             m.setExpectedIds(membersForRingUpdate);
@@ -681,7 +681,7 @@ public class SynchHandler extends IoHandlerAdapter {
             session.close(false);
             return;
         }
-        boolean isRing = SynchType.checkIfRingType(msg.getSynchType());
+        boolean isRing = SyncType.checkIfRingType(msg.getSyncType());
         Map<String, String> ringMsgToScMap = null;
         if (isRing) {
             ringMsgToScMap = new HashMap<>();
@@ -736,7 +736,7 @@ public class SynchHandler extends IoHandlerAdapter {
                 log.debug("Starting to update messages {} for ring", messagesForRing);
             }
             ISynchCallbak callBack = this.callbak;
-            SynchType type = getProperRingType(msg);
+            SyncType type = getProperRingType(msg);
             nodesForRingUpdate = getAliveMemberIds();
             SynchFeature sf = new SynchHandler(synchContext, type)
                     .withCallBack(callBack)
@@ -747,7 +747,7 @@ public class SynchHandler extends IoHandlerAdapter {
                     .get();
             if (sf == null) {
                 //TODO is this right?
-                SynchMessage m = createCompleteResponse(SynchMessage.TYPE_FAILD_RING, null, SynchMode.SYNCH_CLUSTER, msg.getSynchType(), (byte) -1);
+                SynchMessage m = createCompleteResponse(SynchMessage.TYPE_FAILD_RING, null, SynchMode.SYNCH_CLUSTER, msg.getSyncType(), (byte) -1);
                 log.warn("synch failed due to null SF");
                 session.write(m);
                 session.close(false);
@@ -795,12 +795,12 @@ public class SynchHandler extends IoHandlerAdapter {
         }
 
         if (responseContents.size() == 0) {
-            SynchMessage m = createCompleteResponse(SynchMessage.TYPE_OK, null, SynchMode.SYNCH_CLUSTER, msg.getSynchType(), (byte) 0);
+            SynchMessage m = createCompleteResponse(SynchMessage.TYPE_OK, null, SynchMode.SYNCH_CLUSTER, msg.getSyncType(), (byte) 0);
             session.write(m);
             return;
         }
 
-        SynchMessage m = createCompleteResponse(SynchMessage.TYPE_CHECK, null, SynchMode.SYNCH_CLUSTER, msg.getSynchType(), (byte) (msg.getSequence() + 1));
+        SynchMessage m = createCompleteResponse(SynchMessage.TYPE_CHECK, null, SynchMode.SYNCH_CLUSTER, msg.getSyncType(), (byte) (msg.getSequence() + 1));
         m.setContents(responseContents);
         if (isRing && isFirstMessage) {
             m.setExpectedIds(nodesForRingUpdate);
@@ -884,7 +884,7 @@ public class SynchHandler extends IoHandlerAdapter {
 
     private void handleSender(IoSession session, SynchMessage msg, String peer) throws IllegalAccessException, InstantiationException {
         SynchSession synch = (SynchSession) session.getAttribute("SynchSession");
-        boolean isRing = SynchType.checkIfRingType(this.synch);
+        boolean isRing = SyncType.checkIfRingType(this.synch);
         if (isRing) {
             if (log.isDebugEnabled()) {
                 log.debug("Remote node knew nodes {}", msg.getExpectedIds());
@@ -1376,7 +1376,7 @@ public class SynchHandler extends IoHandlerAdapter {
                         log.debug("Setting edge {} as DOWN", e.getId());
                         synchContext.synchronizedStateChange(e, Member.STATE_DWN);
                         unProperSockets.add(currentSocket);
-                        if (synch != SynchType.UNICAST_ONE_OF) {
+                        if (synch != SyncType.UNICAST_ONE_OF) {
                             this.expectedNodes.remove(session.getMemberId());
                         }
                     }
@@ -1392,7 +1392,7 @@ public class SynchHandler extends IoHandlerAdapter {
                     }
 
                     if (session.isAllTried()) {
-                        if (synch != SynchType.UNICAST_ONE_OF) {
+                        if (synch != SyncType.UNICAST_ONE_OF) {
                             this.expectedNodes.remove(session.getMemberId());
                         }
                         numberOfTrieds++;
@@ -1408,7 +1408,7 @@ public class SynchHandler extends IoHandlerAdapter {
                         session.setImproper(true);
                         log.error("Last synch failed, due to struggle (or other hard errors) with edge {}. Trying other links", session.getMemberId());
                         unProperSockets.add(currentSocket);
-                        if (synch != SynchType.UNICAST_ONE_OF) {
+                        if (synch != SyncType.UNICAST_ONE_OF) {
                             this.expectedNodes.remove(session.getMemberId());
                         }
                         numberOfTrieds++;
@@ -1485,7 +1485,7 @@ public class SynchHandler extends IoHandlerAdapter {
                 .isAllTried()
                 || unProperSockets
                 .contains(currentSocket)
-                || (synch != SynchType.UNICAST_ONE_OF &&
+                || (synch != SyncType.UNICAST_ONE_OF &&
                 !this.expectedNodes.contains(sessions
                         .get(currentSocket).getMemberId()))) {
             if (currentSocket == last_socket) {
@@ -1518,12 +1518,12 @@ public class SynchHandler extends IoHandlerAdapter {
         if (sessions == null || (this.expectedNodes != null &&
                 this.expectedNodes.size() == 0) ||
                 ids == null || numberOfTrieds == ids.length ||
-                (numberOfTrieds > 0 && this.synch == SynchType.UNICAST_ONE_OF)) {
+                (numberOfTrieds > 0 && this.synch == SyncType.UNICAST_ONE_OF)) {
             int synchingNodesLength = ids == null ? 0 : ids.length;
-            boolean isQueriom = synch == SynchType.UNICAST_QUERIOM ||
-                    synch == SynchType.RING_QUERIOM ||
-                    synch == SynchType.RING_BALANCE_QUERIOM ||
-                    synch == SynchType.UNICAST_BALANCE_QUERIOM;
+            boolean isQueriom = synch == SyncType.UNICAST_QUERIOM ||
+                    synch == SyncType.RING_QUERIOM ||
+                    synch == SyncType.RING_BALANCE_QUERIOM ||
+                    synch == SyncType.UNICAST_BALANCE_QUERIOM;
             for (Entry<String, SynchResult> eit : synchFeature.entrySet()) {
                 SynchResult s = eit.getValue();
                 if (isQueriom) {
@@ -1541,7 +1541,7 @@ public class SynchHandler extends IoHandlerAdapter {
                         s.setSuccessful(false);
                     } else if (s.getSynchedMembers().size() > s.getFailedMembers().size()) {
                         s.setSuccessful(true);
-                    } else if (synch == SynchType.UNICAST_ONE_OF
+                    } else if (synch == SyncType.UNICAST_ONE_OF
                             && s.getFailedMembers().size() > 0) {
                         s.setSuccessful(false);
                     } else if (s.getFailedMembers().size() < synchingNodesLength) {
@@ -1598,7 +1598,7 @@ public class SynchHandler extends IoHandlerAdapter {
             message.setId(me.getId());
             message.setInStartup(startupState);
             message.setSynchMode(mode);
-            message.setSynchType(this.synch);
+            message.setSyncType(this.synch);
             message.setType(SynchMessage.TYPE_CHECK);
             message.setContents(this.synchContents.values());
             sessions.get(currentSocket)
@@ -1650,8 +1650,8 @@ public class SynchHandler extends IoHandlerAdapter {
         };
 
         this.synchFeature = new SynchFeature();
-        if (this.synch == SynchType.UNICAST_BALANCE ||
-                this.synch == SynchType.UNICAST_BALANCE_QUERIOM) {
+        if (this.synch == SyncType.UNICAST_BALANCE ||
+                this.synch == SyncType.UNICAST_BALANCE_QUERIOM) {
             Map<Short, List<IMessage>> e2Mag = new HashMap<>();
             if (ids == null || ids.length == 0) {
                 cluster = snapshot.getAliveCluster();
@@ -1697,8 +1697,8 @@ public class SynchHandler extends IoHandlerAdapter {
             }
 
             return;
-        } else if (this.synch == SynchType.RING_BALANCE ||
-                this.synch == SynchType.RING_BALANCE_QUERIOM) {
+        } else if (this.synch == SyncType.RING_BALANCE ||
+                this.synch == SyncType.RING_BALANCE_QUERIOM) {
             Set<Member> members = new HashSet<>();
             if (ids == null || ids.length == 0) {
                 cluster = snapshot.getAliveCluster();

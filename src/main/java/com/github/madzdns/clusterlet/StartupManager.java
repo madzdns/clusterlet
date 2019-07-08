@@ -5,8 +5,6 @@ import java.util.Iterator;
 import java.util.List;
 
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.github.madzdns.clusterlet.codec.ClusterMessage;
 import com.github.madzdns.clusterlet.codec.IMessage;
@@ -23,7 +21,7 @@ public class StartupManager {
 	
 	boolean startClusterSyncing() {
 		ClusterMessage msg = new ClusterMessage();
-		SynchHandler handler = new SynchHandler(synchContext, SynchType.UNICAST_ONE_OF)
+		SynchHandler handler = new SynchHandler(synchContext, SyncType.UNICAST_ONE_OF)
 				.withCallBack(new ClusterSynchCallback(synchContext))
 				.withEncoder(null)
 				.withoutCluster(synchContext.myId);
@@ -46,7 +44,7 @@ public class StartupManager {
 			messages.add(msg);
 		}
 
-		handler = new SynchHandler(synchContext, SynchType.UNICAST_ONE_OF)
+		handler = new SynchHandler(synchContext, SyncType.UNICAST_ONE_OF)
 				.withCallBack(new ClusterSynchCallback(synchContext))
 				.withEncoder(null)
 				.withoutCluster(synchContext.myId);

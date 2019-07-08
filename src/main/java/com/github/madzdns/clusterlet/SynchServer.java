@@ -15,6 +15,7 @@ public class SynchServer {
     private Bind synchBindings;
     private SynchHandler handler;
     private SynchContext synchContext;
+    private NioSocketAcceptor socket;
 
     public SynchServer(SynchHandler handler, Bind synchBindings) {
         this.synchBindings = Objects.requireNonNull(synchBindings);
@@ -25,8 +26,11 @@ public class SynchServer {
         this.synchContext = Objects.requireNonNull(handler.synchContext);
     }
 
-    public void start() throws IOException {
-        NioSocketAcceptor socket = new NioSocketAcceptor();
+    public synchronized void start() throws IOException {
+        if (socket != null) {
+            throw new IllegalStateException("socket is already activated");
+        }
+        socket = new NioSocketAcceptor();
         socket.setHandler(handler);
         socket.setReuseAddress(true);
         List<SocketAddress> addz = new ArrayList<>();
@@ -59,19 +63,9 @@ public class SynchServer {
         long lastModified = new Date().getTime();
 
         if (me.getSynchAddresses() == null) {
-            final Set<Short> awareIds = new HashSet<>();
-            awareIds.add(synchContext.myId);
-            me.setSynchAddresses(myAddrzForSynch);
-            me.setLastModified(lastModified);
-            me.setAwareIds(awareIds);
-            changed = true;
+            changed = prepareSyncAddresses(myAddrzForSynch, me, lastModified);
         } else if (!me.getSynchAddresses().equals(myAddrzForSynch)) {
-            final Set<Short> awareIds = new HashSet<>();
-            awareIds.add(synchContext.myId);
-            me.setSynchAddresses(myAddrzForSynch);
-            me.setLastModified(lastModified);
-            me.setAwareIds(awareIds);
-            changed = true;
+            changed = prepareSyncAddresses(myAddrzForSynch, me, lastModified);
         }
         if (changed) {
             synchContext.updateMember(me);
@@ -82,8 +76,20 @@ public class SynchServer {
         new StartupManager(synchContext).startClusterSyncing();
     }
 
+    private boolean prepareSyncAddresses(Set<ClusterAddress> myAddrzForSynch, Member me, long lastModified) {
+        boolean changed;
+        final Set<Short> awareIds = new HashSet<>();
+        awareIds.add(synchContext.myId);
+        me.setSynchAddresses(myAddrzForSynch);
+        me.setLastModified(lastModified);
+        me.setAwareIds(awareIds);
+        changed = true;
+        return changed;
+    }
+
     private static class NetHelper {
         private static List<InetAddress> addresses = null;
+
         public static List<InetAddress> getAllAddresses() throws SocketException {
             if (addresses != null) {
                 return addresses;
@@ -99,5 +105,13 @@ public class SynchServer {
             }
             return addresses;
         }
+    }
+
+    public synchronized void stop() {
+        if (socket == null) {
+            return;
+        }
+        socket.unbind();
+        socket.dispose();
     }
 }
