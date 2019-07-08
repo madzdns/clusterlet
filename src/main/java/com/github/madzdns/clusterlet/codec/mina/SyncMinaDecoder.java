@@ -3,20 +3,18 @@ package com.github.madzdns.clusterlet.codec.mina;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 
+import com.github.madzdns.clusterlet.codec.SyncMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.mina.core.buffer.IoBuffer;
 import org.apache.mina.core.session.IoSession;
 import org.apache.mina.filter.codec.CumulativeProtocolDecoder;
 import org.apache.mina.filter.codec.ProtocolDecoderOutput;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import com.github.madzdns.clusterlet.codec.SynchMessage;
 import com.github.madzdns.clusterlet.helper.Types;
 
 @Slf4j
-public class SynchMinaDecoder extends CumulativeProtocolDecoder {
-    private static final String DECODE_STATE = "_state." + SynchMinaDecoder.class;
+public class SyncMinaDecoder extends CumulativeProtocolDecoder {
+    private static final String DECODE_STATE = "_state." + SyncMinaDecoder.class;
 
     @Override
     protected boolean doDecode(IoSession session, IoBuffer in,
@@ -33,7 +31,7 @@ public class SynchMinaDecoder extends CumulativeProtocolDecoder {
                 return false;
             }
 
-            SynchMessage msg = new SynchMessage();
+            SyncMessage msg = new SyncMessage();
             byte[] data = new byte[len];
             in.get(data);
             try (DataInputStream ins = new DataInputStream(new ByteArrayInputStream(data))) {

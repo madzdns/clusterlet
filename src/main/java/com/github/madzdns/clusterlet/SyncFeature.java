@@ -2,7 +2,7 @@ package com.github.madzdns.clusterlet;
 
 import java.util.HashMap;
 
-public class SynchFeature extends HashMap<String, SynchResult> {
+public class SyncFeature extends HashMap<String, SyncResult> {
 
 	/**
 	 * 

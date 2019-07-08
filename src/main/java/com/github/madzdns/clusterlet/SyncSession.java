@@ -6,6 +6,7 @@ import java.util.List;
 
 import javax.net.ssl.SSLContext;
 
+import com.github.madzdns.clusterlet.codec.SyncMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.mina.core.future.ConnectFuture;
 import org.apache.mina.core.future.IoFutureListener;
@@ -14,17 +15,16 @@ import org.apache.mina.filter.ssl.SslFilter;
 import com.github.madzdns.clusterlet.Member.ClusterAddress;
 import com.github.madzdns.clusterlet.api.net.NetProvider;
 import com.github.madzdns.clusterlet.api.net.compress.filter.MinaCompressionFilter;
-import com.github.madzdns.clusterlet.codec.SynchMessage;
-import com.github.madzdns.clusterlet.codec.mina.SynchMinaDecoder;
-import com.github.madzdns.clusterlet.codec.mina.SynchMinaEncoder;
+import com.github.madzdns.clusterlet.codec.mina.SyncMinaDecoder;
+import com.github.madzdns.clusterlet.codec.mina.SyncMinaEncoder;
 
 @Slf4j
-class SynchSession {
+class SyncSession {
     class MinaConnectListener implements IoFutureListener<ConnectFuture> {
         private String link = "";
-        private SynchMessage msg;
+        private SyncMessage msg;
 
-        public MinaConnectListener(SynchMessage msg) {
+        public MinaConnectListener(SyncMessage msg) {
             this.msg = msg;
         }
 
@@ -33,17 +33,17 @@ class SynchSession {
             Throwable e = connection.getException();
             if (e != null) {
                 if (e instanceof ConnectException) {
-                    log.error("{} to member {}", e.getMessage(), SynchSession.this.getMemberId());
+                    log.error("{} to member {}", e.getMessage(), SyncSession.this.getMemberId());
                 } else {
                     log.error("", e);
                 }
                 if (e instanceof ConnectException)
-                    handler.workCallback(SynchSession.this, SynchHandler.STATE_WORK_FAILED, link);
+                    handler.workCallback(SyncSession.this, SyncHandler.STATE_WORK_FAILED, link);
             } else if (!connection.isConnected()) {
-                handler.workCallback(SynchSession.this, SynchHandler.STATE_WORK_FAILED, link);
+                handler.workCallback(SyncSession.this, SyncHandler.STATE_WORK_FAILED, link);
 
             } else {
-                connection.getSession().setAttribute("SynchSession", SynchSession.this);
+                connection.getSession().setAttribute("SyncSession", SyncSession.this);
                 log.debug("Connection is stablished in link {} ", link);
                 connection.getSession().write(msg);
             }
@@ -62,14 +62,14 @@ class SynchSession {
     private int lastSocket = 0;
     private List<ClusterAddress> sockets;
     private Object mutx = new Object();
-    private SynchHandler handler;
+    private SyncHandler handler;
     private Member member;
     private boolean allTried = false;
     private boolean improper = false;
     final Object improperMutex = new Object();
 
-    public SynchSession(Member member, SynchHandler handler) {
-        this.sockets = new ArrayList<>(member.getSynchAddresses());
+    public SyncSession(Member member, SyncHandler handler) {
+        this.sockets = new ArrayList<>(member.getSyncAddresses());
         this.handler = handler;
         this.member = member;
 
@@ -105,13 +105,13 @@ class SynchSession {
         this.sockets = sockets;
     }
 
-    public void sendMsg(SynchMessage msg) {
+    public void sendMsg(SyncMessage msg) {
         synchronized (mutx) {
             if (currentSocket > -1
                     && handler != null) {
                 ClusterAddress currentEdgeSocketAddr = sockets.get(currentSocket);
-                SynchSocket socket =
-                        new SynchSocket(currentEdgeSocketAddr.getAddress().getHostAddress(),
+                SyncSocket socket =
+                        new SyncSocket(currentEdgeSocketAddr.getAddress().getHostAddress(),
                                 currentEdgeSocketAddr.getPort());
                 socket.setHandler(handler);
                 if (!member.isAuthByKey()) {
@@ -122,7 +122,7 @@ class SynchSession {
                 }
 
                 if (member.isUseSsl()) {
-                    String cer = handler.synchContext.getConfig().getCertificatePath();
+                    String cer = handler.syncContext.getConfig().getCertificatePath();
                     SSLContext ssl = null;
                     if (cer == null) {
                         ssl = NetProvider.getClientSslContext();
@@ -141,26 +141,26 @@ class SynchSession {
                 socket.setFilter("compress_filter",
                         new MinaCompressionFilter());
 
-                socket.setFilter("synchsocket_codec",
-                        new SynchMinaEncoder(),
-                        new SynchMinaDecoder());
+                socket.setFilter("syncSocket_codec",
+                        new SyncMinaEncoder(),
+                        new SyncMinaDecoder());
                 try {
                     socket.connect(this.new MinaConnectListener(msg));
                 } catch (Exception e) {
                     log.error("", e);
-                    handler.workCallback(this, SynchHandler.STATE_WORK_FAILED,
+                    handler.workCallback(this, SyncHandler.STATE_WORK_FAILED,
                             currentEdgeSocketAddr.getAddress().getHostAddress());
                 }
             } else if (handler != null) {
-                handler.workCallback(this, SynchHandler.STATE_WORK_FAILED, "");
+                handler.workCallback(this, SyncHandler.STATE_WORK_FAILED, "");
             }
         }
     }
 
-    public SynchHandler getHandler() {
+    public SyncHandler getHandler() {
         return handler;
     }
-    public void setHandler(SynchHandler handler) {
+    public void setHandler(SyncHandler handler) {
         this.handler = handler;
     }
     public boolean isAllTried() {

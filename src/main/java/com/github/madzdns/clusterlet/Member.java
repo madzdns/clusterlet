@@ -1,8 +1,6 @@
 package com.github.madzdns.clusterlet;
 
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.Externalizable;
 import java.io.IOException;
@@ -23,33 +21,21 @@ public class Member implements INode, Externalizable {
         public ClusterAddress(InetAddress addr, int port) {
             super(addr, port);
         }
-
         public ClusterAddress(String hostname, int port) {
             super(hostname, port);
         }
     }
 
     private ReentrantReadWriteLock idsLock = new ReentrantReadWriteLock();
-
     private ReentrantReadWriteLock keysLock = new ReentrantReadWriteLock();
-
     public final static byte STATE_DEL = 0;
     public final static byte STATE_VLD = 1;//valid
     public final static byte STATE_DWN = 2;//down
-
-    public final static byte SYNCHED = 0;
-
-    public final static byte NOT_SYNCHED = -1;
-
+    public final static byte SYNCED = 0;
+    public final static byte NOT_SYNCED = -1;
     public final static short MONITOR_INTERVAL = 60;
-
     public final static short MONITOR_DELAY = 10;
-
-    public final static short REPORT_INTERVAL = 0;
-
-    public final static short REPORT_DELAY = 0;
-
-    private Set<ClusterAddress> synchAddresses;
+    private Set<ClusterAddress> syncAddresses;
 
     /*
      * This field is only used to determine changes in in Edge class implementation
@@ -80,7 +66,7 @@ public class Member implements INode, Externalizable {
      * any number greater than 0 means this is sent to that id
      * but has not got receipt as scheduled
      */
-    private short schedule = NOT_SYNCHED;
+    private short schedule = NOT_SYNCED;
 
     private short monitorInterval = MONITOR_INTERVAL;
 
@@ -96,7 +82,7 @@ public class Member implements INode, Externalizable {
     }
 
     public Member(final short id,
-                  final Set<ClusterAddress> synchAddresses,
+                  final Set<ClusterAddress> syncAddresses,
                   final boolean useSsl,
                   final boolean authByKey,
                   final String key,
@@ -104,7 +90,7 @@ public class Member implements INode, Externalizable {
                   final Set<Short> awareIds,
                   final byte state) {
         this.id = id;
-        this.synchAddresses = synchAddresses;
+        this.syncAddresses = syncAddresses;
         this.useSsl = useSsl;
         this.authByKey = authByKey;
         //put new key in the keychain
@@ -113,7 +99,7 @@ public class Member implements INode, Externalizable {
         this.awareIds = awareIds;
         this.state = state;
 
-        this.schedule = NOT_SYNCHED;
+        this.schedule = NOT_SYNCED;
         this.lastModified = lastModified;
         this.monitorDelay = monitorDelay;
         this.monitorInterval = monitorInterval;
@@ -136,20 +122,20 @@ public class Member implements INode, Externalizable {
         return "";
     }
 
-    public SynchSession createSynchSession(SynchHandler handler) {
-        return new SynchSession(this, handler);
+    public SyncSession createSynchSession(SyncHandler handler) {
+        return new SyncSession(this, handler);
     }
 
     /*
      * TODO here I don't create a Set, so be careful, no one should alter this Set
      * without proper care
      */
-    public Set<ClusterAddress> getSynchAddresses() {
-        return synchAddresses;
+    public Set<ClusterAddress> getSyncAddresses() {
+        return syncAddresses;
     }
 
-    protected void setSynchAddresses(Set<ClusterAddress> synchAddresses) {
-        this.synchAddresses = synchAddresses;
+    protected void setSyncAddresses(Set<ClusterAddress> syncAddresses) {
+        this.syncAddresses = syncAddresses;
     }
 
     @Override
@@ -295,17 +281,17 @@ public class Member implements INode, Externalizable {
 
     public boolean isFullyScheduled() {
 
-        return schedule == SYNCHED;
+        return schedule == SYNCED;
     }
 
     public boolean isScheduled() {
 
-        return schedule > NOT_SYNCHED;
+        return schedule > NOT_SYNCED;
     }
 
     public void setScheduled(boolean scheduled) {
 
-        this.schedule = (short) (scheduled ? SYNCHED : NOT_SYNCHED);
+        this.schedule = (short) (scheduled ? SYNCED : NOT_SYNCED);
     }
 
     public short getSchedule() {
@@ -348,7 +334,7 @@ public class Member implements INode, Externalizable {
         out.writeShort(monitorInterval);
         out.writeShort(reportDelay);
         out.writeShort(reportInterval);
-        out.writeObject(synchAddresses);
+        out.writeObject(syncAddresses);
     }
 
     @SuppressWarnings("unchecked")
@@ -386,9 +372,9 @@ public class Member implements INode, Externalizable {
         this.monitorInterval = in.readShort();
         this.reportDelay = in.readShort();
         this.reportInterval = in.readShort();
-        this.synchAddresses = (Set<ClusterAddress>) in.readObject();
+        this.syncAddresses = (Set<ClusterAddress>) in.readObject();
 
-        this.schedule = NOT_SYNCHED;
+        this.schedule = NOT_SYNCED;
         this.name = createName(this.id);
         /*
          * This makes previous down state to STATE_DEL
@@ -484,8 +470,8 @@ public class Member implements INode, Externalizable {
                 .append(lastModified)
                 .append(",use ssl=")
                 .append(useSsl)
-                .append(",synch addrs:")
-                .append(String.valueOf(synchAddresses))
+                .append(",sync addrs:")
+                .append(String.valueOf(syncAddresses))
                 .append(", monitor delay=")
                 .append(monitorDelay)
                 .append(", monitor interval")
@@ -514,9 +500,9 @@ public class Member implements INode, Externalizable {
                 .append("<aware-ids>")
                 .append(this.awareIds)
                 .append("</aware-ids>")
-                .append("<synch-addrz>")
-                .append(synchAddresses)
-                .append("</synch-addrz>")
+                .append("<sync-addrz>")
+                .append(syncAddresses)
+                .append("</sync-addrz>")
                 .append("</edge>");
         return buf.toString();
     }

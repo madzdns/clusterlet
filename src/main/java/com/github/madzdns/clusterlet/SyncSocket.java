@@ -14,9 +14,9 @@ import org.apache.mina.filter.codec.ProtocolDecoder;
 import org.apache.mina.filter.codec.ProtocolEncoder;
 import org.apache.mina.transport.socket.nio.NioSocketConnector;
 
-import com.github.madzdns.clusterlet.SynchSession.MinaConnectListener;
+import com.github.madzdns.clusterlet.SyncSession.MinaConnectListener;
 
-public class SynchSocket {
+public class SyncSocket {
 	
 	private NioSocketConnector socket = null;
 	
@@ -80,7 +80,7 @@ public class SynchSocket {
 		}
 	}
 	
-	public SynchSocket(String remote,int port) {
+	public SyncSocket(String remote, int port) {
 		
 		this.remote = remote;
 		
@@ -89,7 +89,7 @@ public class SynchSocket {
 		socket = new NioSocketConnector();
 	}
 	
-	public SynchSocket(String remote,String local,int port) {
+	public SyncSocket(String remote, String local, int port) {
 		
 		this.remote = remote;
 		this.local = local;

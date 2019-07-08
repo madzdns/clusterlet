@@ -3,19 +3,19 @@ package com.github.madzdns.clusterlet;
 import java.util.HashSet;
 import java.util.Set;
 
-public class SynchResult {
+public class SyncResult {
 
     private boolean successful;
     private Set<Short> failedMembers;
-    private Set<Short> synchedMembers;
+    private Set<Short> syncedMembers;
 
-    public SynchResult() {
+    public SyncResult() {
         this.failedMembers = new HashSet<>();
-        this.synchedMembers = new HashSet<>();
+        this.syncedMembers = new HashSet<>();
     }
 
     /**
-     * @return true if message successfully was synched
+     * @return true if message successfully was synced
      */
     public boolean isSuccessful() {
         return successful;
@@ -26,7 +26,7 @@ public class SynchResult {
     }
 
     /**
-     * @return id of nodes that message was failed to synched with them
+     * @return id of nodes that message was failed to synced with them
      */
     public Set<Short> getFailedMembers() {
         return failedMembers;
@@ -37,36 +37,36 @@ public class SynchResult {
     }
 
     /**
-     * @return id of nodes that message was successfully synched with them
+     * @return id of nodes that message was successfully synced with them
      */
-    public Set<Short> getSynchedMembers() {
-        return synchedMembers;
+    public Set<Short> getSyncedMembers() {
+        return syncedMembers;
     }
 
-    public void setSynchedMembers(Set<Short> synchedNodes) {
-        this.synchedMembers = synchedNodes;
+    public void setSyncedMembers(Set<Short> syncedMembers) {
+        this.syncedMembers = syncedMembers;
     }
 
-    public void addSynchedMember(Short id) {
-        this.synchedMembers.add(id);
+    public void addSyncedMember(Short id) {
+        this.syncedMembers.add(id);
     }
 
-    public void addSynchedMember(Set<Short> ids) {
+    public void addSyncedMember(Set<Short> ids) {
         if (ids == null) {
             return;
         }
-        this.synchedMembers.addAll(ids);
+        this.syncedMembers.addAll(ids);
     }
 
-    public void removeSynchedMember(Set<Short> ids) {
+    public void removeSyncedMember(Set<Short> ids) {
         if (ids == null) {
             return;
         }
-        this.synchedMembers.removeAll(ids);
+        this.syncedMembers.removeAll(ids);
     }
 
-    public void removeSynchedMember(Short id) {
-        this.synchedMembers.remove(id);
+    public void removeSyncedMember(Short id) {
+        this.syncedMembers.remove(id);
     }
 
     public void addFailedMember(Short id) {

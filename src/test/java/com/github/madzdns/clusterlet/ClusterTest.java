@@ -1,6 +1,6 @@
 package com.github.madzdns.clusterlet;
 
-import com.github.madzdns.clusterlet.config.SynchConfig;
+import com.github.madzdns.clusterlet.config.SyncConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 
@@ -24,11 +24,11 @@ public class ClusterTest {
         final short NODE_ID = 1;
         final String clusterFile = "cluster_file";
         new File(clusterFile).createNewFile();
-        SynchConfig config = new SynchConfig(clusterFile,
+        SyncConfig config = new SyncConfig(clusterFile,
                 sslKeyStorePath, sslTrustStorepath,
                 KEYSTORE_PASSWORD, TRUSTSTORE_PASSWORD, KEYSTORE_PASSWORD_2ND,
                 CERTIFICATE_PATH);
-        SynchContext context = new SynchContext(NODE_ID, config);
+        SyncContext context = new SyncContext(NODE_ID, config);
         ClusterSnapshot cs = context.getSnapshot();
         assertNotNull(cs.getCluster());
         assertEquals(1, cs.getCluster().size());

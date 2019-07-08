@@ -9,7 +9,7 @@ import java.io.IOException;
 import java.util.*;
 
 @Slf4j
-public class SynchMessage implements ISynchMessage {
+public class SyncMessage implements ISyncMessage {
 
     public final static byte TYPE_BAD_KEY = 0;
     public final static byte TYPE_BAD_SEQ = 1;
@@ -33,11 +33,11 @@ public class SynchMessage implements ISynchMessage {
     public final static byte IN_STARTUP = 1;
     public final static byte NOT_IN_STARTUP = 0;
 
-    public enum SynchMode {
-        SYNCH_CLUSTER((byte) 1),
-        SYNCH_MESSAGE((byte) 0);
+    public enum SyncMode {
+        SYNC_CLUSTER((byte) 1),
+        SYNC_MESSAGE((byte) 0);
         private byte mode;
-        SynchMode(byte mode) {
+        SyncMode(byte mode) {
             this.mode = mode;
         }
         public byte getMode() {
@@ -53,13 +53,13 @@ public class SynchMessage implements ISynchMessage {
     private short id = 0;
     private byte type = 0;
     private byte sequence = 0;
-    private SynchMode synchMode = SynchMode.SYNCH_CLUSTER;
+    private SyncMode syncMode = SyncMode.SYNC_CLUSTER;
     private boolean inStartup = false;
-    private List<SynchContent> contents;
+    private List<SyncContent> contents;
     private SyncType syncType = SyncType.UNICAST;
     private Set<Short> expectedIds = null;
 
-    public SynchMessage() {
+    public SyncMessage() {
         contents = new ArrayList<>();
     }
 
@@ -95,12 +95,12 @@ public class SynchMessage implements ISynchMessage {
         this.sequence = sequence;
     }
 
-    public SynchMode getSynchMode() {
-        return this.synchMode;
+    public SyncMode getSyncMode() {
+        return this.syncMode;
     }
 
-    public void setSynchMode(final SynchMode mode) {
-        this.synchMode = mode;
+    public void setSyncMode(final SyncMode mode) {
+        this.syncMode = mode;
     }
 
     public boolean isInStartup() {
@@ -111,19 +111,19 @@ public class SynchMessage implements ISynchMessage {
         this.inStartup = inStartup;
     }
 
-    public List<SynchContent> getContents() {
+    public List<SyncContent> getContents() {
         return this.contents;
     }
 
-    public void setContents(List<SynchContent> contents) {
+    public void setContents(List<SyncContent> contents) {
         this.contents = contents;
     }
 
-    public void setContents(Collection<SynchContent> contents) {
-        this.contents = new ArrayList<SynchContent>(contents);
+    public void setContents(Collection<SyncContent> contents) {
+        this.contents = new ArrayList<SyncContent>(contents);
     }
 
-    public void addContents(SynchContent content) {
+    public void addContents(SyncContent content) {
         this.contents.add(content);
     }
 
@@ -151,10 +151,10 @@ public class SynchMessage implements ISynchMessage {
         sequence = in.readByte();
         inStartup = in.readBoolean();
         byte mode = in.readByte();
-        if (mode == SynchMode.SYNCH_CLUSTER.getMode()) {
-            synchMode = SynchMode.SYNCH_CLUSTER;
+        if (mode == SyncMode.SYNC_CLUSTER.getMode()) {
+            syncMode = SyncMode.SYNC_CLUSTER;
         } else {
-            synchMode = SynchMode.SYNCH_MESSAGE;
+            syncMode = SyncMode.SYNC_MESSAGE;
         }
         mode = in.readByte();
         syncType = SyncType.getByValue(mode);
@@ -199,7 +199,7 @@ public class SynchMessage implements ISynchMessage {
                         awareIds.add(in.readShort());
                     }
                 }
-                SynchContent s = new SynchContent(key, version, awareIds, message);
+                SyncContent s = new SyncContent(key, version, awareIds, message);
                 this.contents.add(s);
             }
         }
@@ -212,7 +212,7 @@ public class SynchMessage implements ISynchMessage {
         out.writeByte(type);
         out.writeByte(sequence);
         out.writeBoolean(inStartup);
-        out.writeByte(synchMode.getMode());
+        out.writeByte(syncMode.getMode());
         out.writeByte(syncType.getValue());
         List<String> keys = getKeyChain();
         if (keys != null) {
@@ -242,7 +242,7 @@ public class SynchMessage implements ISynchMessage {
             return;
         }
 
-        for (SynchContent c : contents) {
+        for (SyncContent c : contents) {
             if (c.getContent() == null ||
                     c.getContent().length == 0) {
                 out.writeInt(0);

@@ -3,7 +3,7 @@ package com.github.madzdns.clusterlet.config;
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
-public class Socket {
+public class SocketConfig {
     public static final String ANY = "*";
     private String ip = null;
     private int port = 0;
@@ -19,15 +19,14 @@ public class Socket {
     }
 
     public int getPort() {
-
-        if (port != 0)
+        if (port != 0) {
             return port;
+        }
 
         if (value == null ||
-                value.split(":").length != 2)
-
+                value.split(":").length != 2) {
             return 0;
-
+        }
         return port = Integer.parseInt(value.split(":")[1]);
     }
 

@@ -2,15 +2,15 @@ package com.github.madzdns.clusterlet.codec;
 
 import java.util.Set;
 
-public class SynchContent {
+public class SyncContent {
 
 	private String key;
 	private long version;
 	private Set<Short> awareIds;
 	private byte[] content;
 	
-	public SynchContent(String key, long version, Set<Short> awareIds,
-			byte[] content) {
+	public SyncContent(String key, long version, Set<Short> awareIds,
+					   byte[] content) {
 
 		this.key = key;
 		this.version = version;
@@ -67,9 +67,9 @@ public class SynchContent {
 	@Override
 	public boolean equals(Object obj) {
 		
-		if(obj instanceof SynchContent) {
+		if(obj instanceof SyncContent) {
 			
-			SynchContent s = (SynchContent) obj;
+			SyncContent s = (SyncContent) obj;
 			
 			if(s.getKey() == null || getKey() == null) {
 				

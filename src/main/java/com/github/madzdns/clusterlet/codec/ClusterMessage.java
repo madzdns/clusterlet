@@ -2,8 +2,6 @@ package com.github.madzdns.clusterlet.codec;
 
 import com.github.madzdns.clusterlet.Member.ClusterAddress;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -21,20 +19,20 @@ public class ClusterMessage implements IMessage {
     private boolean authByKey = true;
     private String credentionalKey = "";
     private long version = 0;
-    private Set<ClusterAddress> synchAddresses = null;
+    private Set<ClusterAddress> syncAddresses = null;
     private byte command = 0;
 
     public ClusterMessage() {
     }
 
     public ClusterMessage(short id, boolean useSsl, boolean authByKey, String key,
-                          long version, Set<ClusterAddress> synchAddresses, byte command) {
+                          long version, Set<ClusterAddress> syncAddresses, byte command) {
         this.id = id;
         this.useSsl = useSsl;
         this.authByKey = authByKey;
         this.credentionalKey = key;
         this.version = version;
-        this.synchAddresses = synchAddresses;
+        this.syncAddresses = syncAddresses;
         this.command = command;
     }
 
@@ -74,12 +72,12 @@ public class ClusterMessage implements IMessage {
         this.version = version;
     }
 
-    public Set<ClusterAddress> getSynchAddresses() {
-        return synchAddresses;
+    public Set<ClusterAddress> getSyncAddresses() {
+        return syncAddresses;
     }
 
-    public void setSynchAddresses(Set<ClusterAddress> synchAddresses) {
-        this.synchAddresses = synchAddresses;
+    public void setSyncAddresses(Set<ClusterAddress> syncAddresses) {
+        this.syncAddresses = syncAddresses;
     }
 
     public byte getCommand() {
@@ -101,9 +99,9 @@ public class ClusterMessage implements IMessage {
             out.writeLong(version);
             out.writeByte(command);
 
-            if (synchAddresses != null) {
-                out.writeByte(synchAddresses.size());
-                for (ClusterAddress addr : synchAddresses) {
+            if (syncAddresses != null) {
+                out.writeByte(syncAddresses.size());
+                for (ClusterAddress addr : syncAddresses) {
                     out.writeByte(addr.getAddress().getAddress().length);
                     out.write(addr.getAddress().getAddress());
                     out.writeInt(addr.getPort());
@@ -137,7 +135,7 @@ public class ClusterMessage implements IMessage {
             command = in.readByte();
             int len = in.readByte();
             if (len > 0) {
-                synchAddresses = new HashSet<>();
+                syncAddresses = new HashSet<>();
                 byte[] ip;
                 byte ip_len;
                 int port;
@@ -151,7 +149,7 @@ public class ClusterMessage implements IMessage {
                     port = in.readInt();
                     if (ip != null) {
                         ClusterAddress ca = new ClusterAddress(InetAddress.getByAddress(ip), port);
-                        synchAddresses.add(ca);
+                        syncAddresses.add(ca);
                     }
                 }
             }

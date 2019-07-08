@@ -1,9 +1,9 @@
 package com.github.madzdns.clusterlet;
 
 import com.github.madzdns.clusterlet.codec.IMessage;
-import com.github.madzdns.clusterlet.config.Bind;
-import com.github.madzdns.clusterlet.config.Socket;
-import com.github.madzdns.clusterlet.config.SynchConfig;
+import com.github.madzdns.clusterlet.config.SocketBindConfig;
+import com.github.madzdns.clusterlet.config.SocketConfig;
+import com.github.madzdns.clusterlet.config.SyncConfig;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -14,10 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.*;
-import java.util.Collections;
-import java.util.Date;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -28,8 +25,10 @@ public class ClusterIntegrationTest {
     final static String clusterFile2 = "cluster_file_2";
     final static String messageToSend = "Ohoy";
     final static String messageToSendKey = "OhoyKey";
-    SynchServer syncServer1 = null;
-    SynchServer syncServer2 = null;
+    final static String messageToSend2 = "Ohoy2";
+    final static String messageToSendKey2 = "OhoyKey2";
+    SyncServer syncServer1 = null;
+    SyncServer syncServer2 = null;
 
     @Getter
     @Setter
@@ -78,16 +77,16 @@ public class ClusterIntegrationTest {
 
     public interface SyncCallBackCallable {
         boolean callback(ISession session, IMessage message,
-                         Set<Short> withNodes, ISynchProtocolOutput out);
+                         Set<Short> withNodes, ISyncProtocolOutput out);
     }
 
     @AllArgsConstructor
-    private static class SyncCallback implements ISynchCallbak {
+    private static class SyncCallback implements ISyncCallback {
         private SyncCallBackCallable syncCallBackCallable;
 
         @Override
         public boolean callBack(ISession session, IMessage message,
-                                Set<Short> withNodes, ISynchProtocolOutput out) {
+                                Set<Short> withNodes, ISyncProtocolOutput out) {
             if (syncCallBackCallable != null) {
                 return syncCallBackCallable.callback(session, message, withNodes, out);
             } else {
@@ -96,7 +95,7 @@ public class ClusterIntegrationTest {
         }
 
         @Override
-        public void result(SynchFeature synchFeature) {
+        public void result(SyncFeature syncFeature) {
 
         }
     }
@@ -122,20 +121,20 @@ public class ClusterIntegrationTest {
     @Test
     public void clusterJoinTest() throws Exception {
         final short memberId1 = 1;
-        SynchConfig config = new SynchConfig(clusterFile1,
+        SyncConfig config = new SyncConfig(clusterFile1,
                 null, null,
                 null, null,
                 null, null);
-        SynchContext context1 = new SynchContext(memberId1, config);
+        SyncContext context1 = new SyncContext(memberId1, config);
         CountDownLatch startUpLatch = new CountDownLatch(2);
         Thread t1 = new Thread(() -> {
-            SynchHandler handler = context1.make()
+            SyncHandler handler = context1.make()
                     .withCallBack(new SyncCallback(null))
                     .withEncoder(MyMessage.class);
-            Bind syncBinding = new Bind();
-            syncBinding.setSockets(Collections.singletonList(new Socket("localhost:12346")));
+            SocketBindConfig syncBinding = new SocketBindConfig();
+            syncBinding.setSocketConfigs(Collections.singletonList(new SocketConfig("localhost:12346")));
             try {
-                syncServer1 = new SynchServer(handler, syncBinding);
+                syncServer1 = new SyncServer(handler, syncBinding);
                 syncServer1.start();
                 startUpLatch.countDown();
             } catch (IOException e) {
@@ -146,19 +145,19 @@ public class ClusterIntegrationTest {
         t1.start();
 
         final short memberId2 = 2;
-        SynchConfig config2 = new SynchConfig(clusterFile2,
+        SyncConfig config2 = new SyncConfig(clusterFile2,
                 null, null,
                 null, null, null,
                 null);
-        SynchContext context2 = new SynchContext(memberId2, config2);
+        SyncContext context2 = new SyncContext(memberId2, config2);
         Thread t2 = new Thread(() -> {
-            SynchHandler handler = context2.make()
+            SyncHandler handler = context2.make()
                     .withCallBack(new SyncCallback(null))
                     .withEncoder(MyMessage.class);
-            Bind syncBinding = new Bind();
-            syncBinding.setSockets(Collections.singletonList(new Socket("localhost:12347")));
+            SocketBindConfig syncBinding = new SocketBindConfig();
+            syncBinding.setSocketConfigs(Collections.singletonList(new SocketConfig("localhost:12347")));
             try {
-                syncServer2 = new SynchServer(handler, syncBinding);
+                syncServer2 = new SyncServer(handler, syncBinding);
                 syncServer2.start();
                 startUpLatch.countDown();
             } catch (IOException e) {
@@ -181,7 +180,7 @@ public class ClusterIntegrationTest {
         final Set<Short> awareIds = null;//This new member is not aware of other nodes
         final byte state = Member.STATE_VLD;//To delete use Member.STATE_DEL
         Member member = new Member(memberId, syncAddresses, useSsl, authByKey, key, lastModified, awareIds, state);
-        assertTrue(context1.synchCluster(member, SyncType.RING));
+        assertTrue(context1.syncCluster(member, SyncType.RING));
         ClusterSnapshot cs = context2.getSnapshot();
         assertNotNull(cs.getCluster());
         assertEquals(2, cs.getCluster().size(), "Now member 2 should have 2 alive members in its snapshot");
@@ -192,15 +191,15 @@ public class ClusterIntegrationTest {
     @Test
     public void sendingMessage_shouldBeOkTest() throws Exception {
         final short memberId1 = 1;
-        SynchConfig config = new SynchConfig(clusterFile1,
+        SyncConfig config = new SyncConfig(clusterFile1,
                 null, null,
                 null, null,
                 null, null);
-        SynchContext context1 = new SynchContext(memberId1, config);
+        SyncContext context1 = new SyncContext(memberId1, config);
         CountDownLatch startUpLatch = new CountDownLatch(2);
         Thread t1 = new Thread(() -> {
             //Create member 1
-            SynchHandler handler = context1.make()
+            SyncHandler handler = context1.make()
                     .withCallBack(new SyncCallback((session, message, withNodes, out) -> {
                         assertTrue(message instanceof MyMessage);
                         MyMessage myMessage = (MyMessage) message;
@@ -210,10 +209,10 @@ public class ClusterIntegrationTest {
                         return true;
                     }))
                     .withEncoder(MyMessage.class);
-            Bind syncBinding = new Bind();
-            syncBinding.setSockets(Collections.singletonList(new Socket("localhost:12346")));
+            SocketBindConfig syncBinding = new SocketBindConfig();
+            syncBinding.setSocketConfigs(Collections.singletonList(new SocketConfig("localhost:12346")));
             try {
-                syncServer1 = new SynchServer(handler, syncBinding);
+                syncServer1 = new SyncServer(handler, syncBinding);
                 syncServer1.start();
                 startUpLatch.countDown();
             } catch (IOException e) {
@@ -225,19 +224,19 @@ public class ClusterIntegrationTest {
         t1.setName("member 1 thread");
 
         final short memberId2 = 2;
-        SynchConfig config2 = new SynchConfig(clusterFile2,
+        SyncConfig config2 = new SyncConfig(clusterFile2,
                 null, null,
                 null, null, null,
                 null);
-        SynchContext context2 = new SynchContext(memberId2, config2);
+        SyncContext context2 = new SyncContext(memberId2, config2);
         Thread t2 = new Thread(() -> {
-            SynchHandler handler = context2.make()
+            SyncHandler handler = context2.make()
                     .withCallBack(new SyncCallback(null))
                     .withEncoder(MyMessage.class);
-            Bind syncBinding = new Bind();
-            syncBinding.setSockets(Collections.singletonList(new Socket("localhost:12347")));
+            SocketBindConfig syncBinding = new SocketBindConfig();
+            syncBinding.setSocketConfigs(Collections.singletonList(new SocketConfig("localhost:12347")));
             try {
-                syncServer2 = new SynchServer(handler, syncBinding);
+                syncServer2 = new SyncServer(handler, syncBinding);
                 syncServer2.start();
                 startUpLatch.countDown();
             } catch (IOException e) {
@@ -261,7 +260,7 @@ public class ClusterIntegrationTest {
         final Set<Short> awareIds = null;//This new member is not aware of other nodes
         final byte state = Member.STATE_VLD;//To delete use Member.STATE_DEL
         Member member = new Member(memberId, syncAddresses, useSsl, authByKey, key, lastModified, awareIds, state);
-        assertTrue(context1.synchCluster(member, SyncType.RING));
+        assertTrue(context1.syncCluster(member, SyncType.RING));
         ClusterSnapshot cs = context2.getSnapshot();
         assertNotNull(cs.getCluster());
         assertEquals(2, cs.getCluster().size(), "Now member 2 should have 2 alive members in its snapshot");
@@ -269,7 +268,7 @@ public class ClusterIntegrationTest {
         assertEquals(2, cs.getAliveCluster().size());
         //Now sending message from member 2 to others with ring synchronization type
         MyMessage messageFromMember2 = new MyMessage(messageToSendKey, new Date().getTime(), messageToSend);
-        SynchFeature feature = context2.make(SyncType.RING)
+        SyncFeature feature = context2.make(SyncType.RING)
                 .withoutCluster(memberId2)//Dont send to member 2 again
                 .withCallBack(new SyncCallback((session, message, withNodes, out) -> {
                     assertTrue(message instanceof MyMessage);
@@ -280,7 +279,7 @@ public class ClusterIntegrationTest {
                     return true;
                 }))
                 .withEncoder(MyMessage.class)
-                .synch(messageFromMember2)
+                .sync(messageFromMember2)
                 .get();
         assertTrue(feature.size() > 0);
         assertTrue(feature.containsKey(messageToSendKey));
@@ -290,15 +289,15 @@ public class ClusterIntegrationTest {
     @Test
     public void sendingMessage_shouldNotBeOkTest() throws Exception {
         final short memberId1 = 1;
-        SynchConfig config = new SynchConfig(clusterFile1,
+        SyncConfig config = new SyncConfig(clusterFile1,
                 null, null,
                 null, null,
                 null, null);
-        SynchContext context1 = new SynchContext(memberId1, config);
+        SyncContext context1 = new SyncContext(memberId1, config);
         CountDownLatch startUpLatch = new CountDownLatch(2);
         Thread t1 = new Thread(() -> {
             //Create member 1
-            SynchHandler handler = context1.make()
+            SyncHandler handler = context1.make()
                     .withCallBack(new SyncCallback((session, message, withNodes, out) -> {
                         assertTrue(message instanceof MyMessage);
                         MyMessage myMessage = (MyMessage) message;
@@ -308,10 +307,10 @@ public class ClusterIntegrationTest {
                         return false;
                     }))
                     .withEncoder(MyMessage.class);
-            Bind syncBinding = new Bind();
-            syncBinding.setSockets(Collections.singletonList(new Socket("localhost:12346")));
+            SocketBindConfig syncBinding = new SocketBindConfig();
+            syncBinding.setSocketConfigs(Collections.singletonList(new SocketConfig("localhost:12346")));
             try {
-                syncServer1 = new SynchServer(handler, syncBinding);
+                syncServer1 = new SyncServer(handler, syncBinding);
                 syncServer1.start();
                 startUpLatch.countDown();
             } catch (IOException e) {
@@ -323,19 +322,19 @@ public class ClusterIntegrationTest {
         t1.setName("member 1 thread");
 
         final short memberId2 = 2;
-        SynchConfig config2 = new SynchConfig(clusterFile2,
+        SyncConfig config2 = new SyncConfig(clusterFile2,
                 null, null,
                 null, null, null,
                 null);
-        SynchContext context2 = new SynchContext(memberId2, config2);
+        SyncContext context2 = new SyncContext(memberId2, config2);
         Thread t2 = new Thread(() -> {
-            SynchHandler handler = context2.make()
+            SyncHandler handler = context2.make()
                     .withCallBack(new SyncCallback(null))
                     .withEncoder(MyMessage.class);
-            Bind syncBinding = new Bind();
-            syncBinding.setSockets(Collections.singletonList(new Socket("localhost:12347")));
+            SocketBindConfig syncBinding = new SocketBindConfig();
+            syncBinding.setSocketConfigs(Collections.singletonList(new SocketConfig("localhost:12347")));
             try {
-                syncServer2 = new SynchServer(handler, syncBinding);
+                syncServer2 = new SyncServer(handler, syncBinding);
                 syncServer2.start();
                 startUpLatch.countDown();
             } catch (IOException e) {
@@ -359,7 +358,7 @@ public class ClusterIntegrationTest {
         final Set<Short> awareIds = null;//This new member is not aware of other nodes
         final byte state = Member.STATE_VLD;//To delete use Member.STATE_DEL
         Member member = new Member(memberId, syncAddresses, useSsl, authByKey, key, lastModified, awareIds, state);
-        assertTrue(context1.synchCluster(member, SyncType.RING));
+        assertTrue(context1.syncCluster(member, SyncType.RING));
         ClusterSnapshot cs = context2.getSnapshot();
         assertNotNull(cs.getCluster());
         assertEquals(2, cs.getCluster().size(), "Now member 2 should have 2 alive members in its snapshot");
@@ -367,7 +366,7 @@ public class ClusterIntegrationTest {
         assertEquals(2, cs.getAliveCluster().size());
         //Now sending message from member 2 to others with ring synchronization type
         MyMessage messageFromMember2 = new MyMessage(messageToSendKey, new Date().getTime(), messageToSend);
-        SynchFeature feature = context2.make(SyncType.RING)
+        SyncFeature feature = context2.make(SyncType.RING)
                 .withoutCluster(memberId2)//Dont send to member 2 again
                 .withCallBack(new SyncCallback((session, message, withNodes, out) -> {
                     assertTrue(message instanceof MyMessage);
@@ -378,10 +377,106 @@ public class ClusterIntegrationTest {
                     return true;
                 }))
                 .withEncoder(MyMessage.class)
-                .synch(messageFromMember2)
+                .sync(messageFromMember2)
                 .get();
         assertTrue(feature.size() > 0);
         assertTrue(feature.containsKey(messageToSendKey));
         assertFalse(feature.get(messageToSendKey).isSuccessful(), "Because member 1 calback returns false, message synchronization should not be ok");
+    }
+
+    @Test
+    public void sendingTwoMessage_oneShouldBeOkOtherNotBeOkTest() throws Exception {
+        final short memberId1 = 1;
+        SyncConfig config = new SyncConfig(clusterFile1,
+                null, null,
+                null, null,
+                null, null);
+        SyncContext context1 = new SyncContext(memberId1, config);
+        CountDownLatch startUpLatch = new CountDownLatch(2);
+        Thread t1 = new Thread(() -> {
+            //Create member 1
+            SyncHandler handler = context1.make()
+                    .withCallBack(new SyncCallback((session, message, withNodes, out) -> {
+                        assertTrue(message instanceof MyMessage);
+                        return message.getKey().equals(messageToSendKey2);
+                    }))
+                    .withEncoder(MyMessage.class);
+            SocketBindConfig syncBinding = new SocketBindConfig();
+            syncBinding.setSocketConfigs(Collections.singletonList(new SocketConfig("localhost:12346")));
+            try {
+                syncServer1 = new SyncServer(handler, syncBinding);
+                syncServer1.start();
+                startUpLatch.countDown();
+            } catch (IOException e) {
+                fail();
+            }
+        });
+        t1.setDaemon(true);
+        t1.start();
+        t1.setName("member 1 thread");
+
+        final short memberId2 = 2;
+        SyncConfig config2 = new SyncConfig(clusterFile2,
+                null, null,
+                null, null, null,
+                null);
+        SyncContext context2 = new SyncContext(memberId2, config2);
+        Thread t2 = new Thread(() -> {
+            SyncHandler handler = context2.make()
+                    .withCallBack(new SyncCallback(null))
+                    .withEncoder(MyMessage.class);
+            SocketBindConfig syncBinding = new SocketBindConfig();
+            syncBinding.setSocketConfigs(Collections.singletonList(new SocketConfig("localhost:12347")));
+            try {
+                syncServer2 = new SyncServer(handler, syncBinding);
+                syncServer2.start();
+                startUpLatch.countDown();
+            } catch (IOException e) {
+                fail();
+            }
+        });
+        t2.setDaemon(true);
+        t2.start();
+        startUpLatch.await();
+        t1.setName("member 2 thread");
+        //Now both are listening
+
+        //From member 1 synchronize member 2
+        final short memberId = memberId2;
+        final Set<Member.ClusterAddress> syncAddresses = Collections.singleton(
+                new Member.ClusterAddress("localhost", 12347));
+        final boolean useSsl = false;
+        final boolean authByKey = true;
+        final String key = "";
+        final long lastModified = new Date().getTime();
+        final Set<Short> awareIds = null;//This new member is not aware of other nodes
+        final byte state = Member.STATE_VLD;//To delete use Member.STATE_DEL
+        Member member = new Member(memberId, syncAddresses, useSsl, authByKey, key, lastModified, awareIds, state);
+        assertTrue(context1.syncCluster(member, SyncType.RING));
+        ClusterSnapshot cs = context2.getSnapshot();
+        assertNotNull(cs.getCluster());
+        assertEquals(2, cs.getCluster().size(), "Now member 2 should have 2 alive members in its snapshot");
+        assertNotNull(cs.getAliveCluster());
+        assertEquals(2, cs.getAliveCluster().size());
+        //Now sending message from member 2 to others with ring synchronization type
+        MyMessage messageFromMember2 = new MyMessage(messageToSendKey, new Date().getTime(), messageToSend);
+        MyMessage message2FromMember2 = new MyMessage(messageToSendKey2, new Date().getTime(), messageToSend2);
+        SyncFeature feature = context2.make(SyncType.RING)
+                .withoutCluster(memberId2)//Dont send to member 2 again
+                .withCallBack(new SyncCallback((session, message, withNodes, out) -> {
+                    assertTrue(message instanceof MyMessage);
+                    MyMessage myMessage = (MyMessage) message;
+                    assertEquals(messageToSend, myMessage.getMsg(), "message Should be received");
+                    assertEquals(messageToSendKey, myMessage.getKey(), "key Should be received");
+                    assertTrue(myMessage.getVersion() > 0, "version should be > 0");
+                    return true;
+                }))
+                .withEncoder(MyMessage.class)
+                .sync(Arrays.asList(messageFromMember2, message2FromMember2))
+                .get();
+        assertTrue(feature.size() > 0);
+        assertTrue(feature.containsKey(messageToSendKey));
+        assertFalse(feature.get(messageToSendKey).isSuccessful(), "Because member 1 calback returns false, message synchronization should not be ok");
+        assertTrue(feature.get(messageToSendKey2).isSuccessful(), "Because member 1 calback returns true, message synchronization should be ok");
     }
 }

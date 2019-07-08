@@ -4,7 +4,7 @@ import java.util.List;
 
 import com.github.madzdns.clusterlet.codec.IMessage;
 
-public interface ISynchProtocolOutput {
+public interface ISyncProtocolOutput {
 
 	public void write(IMessage message);
 	
