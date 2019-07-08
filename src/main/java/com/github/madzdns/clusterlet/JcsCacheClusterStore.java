@@ -1,79 +1,59 @@
 package com.github.madzdns.clusterlet;
 
-import java.io.IOException;
-import java.io.Serializable;
-import java.util.Iterator;
-
 import org.apache.commons.jcs.engine.CacheElement;
 import org.apache.commons.jcs.engine.behavior.ICacheElement;
 import org.apache.commons.jcs.engine.control.CompositeCache;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.io.Serializable;
+
 public class JcsCacheClusterStore extends JcsCacheStore implements
-		IClusterStore {
-	
-	private Logger log = LoggerFactory.getLogger(JcsCacheClusterStore.class);
-	
-	private CompositeCache<Serializable, Serializable> cache;
-	
-	protected static final String CACHE_NAME = "CLUSTER";
-	
-	public JcsCacheClusterStore(String jcs_conf_path) throws Exception {
-		
-		super(jcs_conf_path);
-		
-		cache = ccm.getCache(CACHE_NAME);
-	}
+        IClusterStore {
+    private Logger log = LoggerFactory.getLogger(JcsCacheClusterStore.class);
+    private CompositeCache<Serializable, Serializable> cache;
+    private String cacheName;
 
-	@Override
-	public void update(Member node) {
+    public JcsCacheClusterStore(String jcs_conf_path) throws Exception {
+        super(jcs_conf_path);
+        cacheName = jcs_conf_path;
+        cache = ccm.getCache(cacheName);
+    }
 
-		ICacheElement<Serializable, Serializable> element = new CacheElement<Serializable, Serializable>(CACHE_NAME, node.getId(), node);
-		
-		try {
-			
-			cache.update(element);
-			
-		} catch (IOException e) {
-			
-			log.error("",e);
-		}
-	}
+    @Override
+    public void update(Member node) {
+        ICacheElement<Serializable, Serializable> element = new CacheElement<>(cacheName, node.getId(), node);
+        try {
+            cache.update(element);
+        } catch (IOException e) {
+            log.error("", e);
+        }
+    }
 
-	@Override
-	public Member get(Short id) {
-		
-		ICacheElement<Serializable, Serializable> element = cache.get(id);
-		
-		if(element != null) {
-			
-			return (Member) element.getVal();
-		}
-		
-		return null;
-	}
+    @Override
+    public Member get(Short id) {
+        ICacheElement<Serializable, Serializable> element = cache.get(id);
+        if (element != null) {
+            return (Member) element.getVal();
+        }
+        return null;
+    }
 
-	@Override
-	public void shutdown() {
+    @Override
+    public void shutdown() {
+        cache.dispose();
+    }
 
-		cache.dispose();
-	}
-
-	@Override
-	public void iterator(IClusterStoreIteratorCallback callbak) {
-		
-		for(Iterator<Serializable> it = cache.getKeySet().iterator(); it.hasNext();) {
-			
-			ICacheElement<Serializable, Serializable> e = cache.get(it.next());
-			
-			if(e != null) {
-				
-				if(e.getVal() instanceof Member) {
-				
-					callbak.next((Member)e.getVal());
-				}
-			}
-		}
-	}
+    @Override
+    public void iterator(IClusterStoreIteratorCallback callbak) {
+        for (Serializable serializable : cache.getKeySet()) {
+            ICacheElement<Serializable, Serializable> e = cache.get(serializable);
+            if (e != null) {
+                if (e.getVal() instanceof Member) {
+                    callbak.next((Member) e.getVal());
+                }
+            }
+        }
+    }
 }
