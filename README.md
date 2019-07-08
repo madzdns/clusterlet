@@ -17,6 +17,15 @@ So... Bring up you're cluster, discover the members and start sending messages
 
 [MadzDNS cluster](https://github.com/madzdns/cluster) is a proof of concept for this library
 
+## Contents
+
+* [Examples](#examples)
+    * [Creating a synchronization context](#creating-a-synchronization-context)
+    * [Creating a cluster listener](#creating-a-cluster-listener)
+    * [Adding a new member to the cluster](#adding-a-new-member-to-the-cluster)
+    * [Synchronization types](#synchronization-types)
+    * [Sending a message to the members](#sending-a-message-to-the-members)
+    
 ## Examples
 
 ### Creating a synchronization context
