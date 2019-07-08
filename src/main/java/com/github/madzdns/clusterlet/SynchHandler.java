@@ -486,7 +486,7 @@ public class SynchHandler extends IoHandlerAdapter {
 
     private void handleMessageSync(IoSession session, SynchMessage msg, Member him,
                                    Boolean startupStateFromSession,
-                                   Boolean isFirstMessge) throws IllegalAccessException, InstantiationException {
+                                   Boolean isFirstMessage) throws IllegalAccessException, InstantiationException {
         /*
          * Here, we check if a communicating edge is valid in our
          * database. If not, don't synch our ZONEs with him.
@@ -664,7 +664,7 @@ public class SynchHandler extends IoHandlerAdapter {
 
         SynchMessage m = createCompleteResponse(SynchMessage.TYPE_CHECK, null, SynchMode.SYNCH_MESSAGE, msg.getSynchType(), (byte) (msg.getSequence() + 1));
         m.setContents(responseContents);
-        if (isRing && isFirstMessge) {
+        if (isRing && isFirstMessage) {
             m.setExpectedIds(membersForRingUpdate);
         }
         session.write(m);
@@ -1024,50 +1024,25 @@ public class SynchHandler extends IoHandlerAdapter {
                         synchContext.addAwareNodes(sc.getKey(), sc.getVersion(), awareNodes);
                     }
                     syncResultHandleStarter2(msg, isRing, sc, awareNodes);
-
                     if (responses != null) {
-
-                        for (Iterator<IMessage> respIt = responses.iterator(); respIt.hasNext(); ) {
-
-                            IMessage response = respIt.next();
-
+                        for (IMessage response : responses) {
                             if (response != null) {
-
                                 awareNodes = synchContext.getAwareNodes(response.getKey(), response.getVersion());
-
                                 responseContents.add(new SynchContent(sc.getKey(), response.getVersion(),
                                         awareNodes, response.serialize()));
                             }
                         }
                     }
-						/*else {
+                    /*else {
 
-							responseContents.add(new SynchContent(sc.getKey(),
-									sc.getVersion(),
-									awareNodes, null));
-						}*/
+                        responseContents.add(new SynchContent(sc.getKey(),
+                                sc.getVersion(),
+                                awareNodes, null));
+                    }*/
                 }
             }
 
-            if (isRing) {
-
-                if (this.expectedNodes.size() == 0) {
-
-                    this.synchContents = faildContents;
-                }
-            }
-
-            int responcesSize = responseContents.size();
-
-            log.debug("responcesSize = {}, numberOfNull = {}", responcesSize, numberOfNull);
-
-            if (responcesSize == 0 || numberOfNull == responcesSize) {
-
-                numberOfTrieds++;
-                createResult();
-
-                session.setAttribute("planned_close");
-                session.close(false);
+            if (checkAndPrepareFailedResult(session, isRing, responseContents, faildContents, numberOfNull)) {
                 return;
             }
 
@@ -1076,99 +1051,59 @@ public class SynchHandler extends IoHandlerAdapter {
              * But because originator brought a valid key, I think this is OK
              * response.setKeyChain(him.getKeyChain());*/
 
-            SynchMessage m = new SynchMessage();
-            m.setId(me.getId());
-            m.setSynchMode(SynchMode.SYNCH_MESSAGE);
-            m.setSynchType(this.synch);
-            m.setType(SynchMessage.TYPE_CHECK);
+            SynchMessage m = createCompleteResponse(SynchMessage.TYPE_CHECK, null, SynchMode.SYNCH_MESSAGE, this.synch, (byte) (msg.getSequence() + 1));
             m.setContents(responseContents);
-            m.setSequence((byte) (msg.getSequence() + 1));
-
             session.write(m);
         } else {
-
             Collection<SynchContent> contents = msg.getContents();
-
             if (contents == null) {
-
                 log.warn("Wrong state - RCVD contents should not be null");
-
 					/*
 					 * I think it is wrong to put these to line in here
 					 * so I replaced them with workCallback()
 					 * numberOfTrieds ++;
 					createResult();*/
-
                 session.setAttribute("planned_close");
                 session.close(true);
-
                 workCallback(synch, STATE_UNPROPER, link);
                 return;
             }
 
             if (log.isDebugEnabled()) {
-
                 log.debug("Received contents {} from {}", contents, msg.getId());
             }
 
-            Set<SynchContent> responseContents = new HashSet<SynchContent>();
-
-            Map<String, SynchContent> faildContents = new HashMap<String, SynchContent>();
-
+            Set<SynchContent> responseContents = new HashSet<>();
+            Map<String, SynchContent> faildContents = new HashMap<>();
             ClusterSynchCallback clusterCallback = new ClusterSynchCallback(synchContext);
-
             int numberOfNull = 0;
-
-            for (Iterator<SynchContent> it = contents.iterator();
-                 it.hasNext(); ) {
-
-                SynchContent sc = it.next();
-
+            for (SynchContent sc : contents) {
                 byte[] m = sc.getContent();
-
                 if (m == null) {
-
                     Set<Short> awareNodes = sc.getAwareIds();
-
                     if (awareNodes == null) {
-
                         awareNodes = new HashSet<Short>();
                     }
-
                     awareNodes.add(msg.getId());
 
                     if (sc.getVersion() > 0) {
-
                         SynchResult sr = synchFeature.get(sc.getKey());
-
                         fillSyncResultForVersionBiggerThan0(msg, isRing, awareNodes, sr);
-
                         Member node = null;
-
                         try {
-
                             node = synchContext.getMemberById(Short.parseShort(sc.getKey()));
-
                             if (node != null) {
-
                                 awareNodes.add(me.getId());
-
                                 node.addAwareId(awareNodes);
                             } else {
-
                                 log.warn("how come node is null!!!");
                             }
-
                         } catch (Exception e) {
-
                             log.error("Error in parsing {}", sc.getKey(), e);
                         }
-
                         continue;
                     }
-
                     SynchResult sr = synchFeature.get(sc.getKey());
-
                     handleNullDataOfStarterHandler(msg, isRing, faildContents, sc, awareNodes, sr);
                 }
 
@@ -1228,21 +1163,7 @@ public class SynchHandler extends IoHandlerAdapter {
                 }
             }
 
-            if (isRing) {
-                if (this.expectedNodes.size() == 0) {
-                    this.synchContents = faildContents;
-                }
-            }
-
-            int responcesSize = responseContents.size();
-            log.debug("responcesSize = {}, numberOfNull = {}", responcesSize, numberOfNull);
-            if (responcesSize == 0 || numberOfNull == responcesSize) {
-                numberOfTrieds++;
-                createResult();
-                session.setAttribute("planned_close");
-                session.close(false);
-                return;
-            }
+            if (checkAndPrepareFailedResult(session, isRing, responseContents, faildContents, numberOfNull)) return;
 
             /* Here in message synch, we don't send originators key chain back either.
              * This way, an edge will accept zone synchronizations from an unknown Edge.
@@ -1255,6 +1176,25 @@ public class SynchHandler extends IoHandlerAdapter {
                 log.debug("message responded {}, type {}, sequence {}", responseContents, m.getType(), m.getSequence());
             }
         }
+    }
+
+    private boolean checkAndPrepareFailedResult(IoSession session, boolean isRing, Set<SynchContent> responseContents, Map<String, SynchContent> faildContents, int numberOfNull) {
+        if (isRing) {
+            if (this.expectedNodes.size() == 0) {
+                this.synchContents = faildContents;
+            }
+        }
+
+        int responcesSize = responseContents.size();
+        log.debug("responcesSize = {}, numberOfNull = {}", responcesSize, numberOfNull);
+        if (responcesSize == 0 || numberOfNull == responcesSize) {
+            numberOfTrieds++;
+            createResult();
+            session.setAttribute("planned_close");
+            session.close(false);
+            return true;
+        }
+        return false;
     }
 
     private void syncResultHandleStarter2(SynchMessage msg, boolean isRing, SynchContent sc, Set<Short> awareNodes) {
@@ -1292,7 +1232,7 @@ public class SynchHandler extends IoHandlerAdapter {
     }
 
     private int handleResponseContentsForNullResponses(SynchMessage msg, boolean isRing, Set<SynchContent> responseContents, int numberOfNull, SynchContent sc) {
-        HashSet<Short> iFaild = new HashSet<Short>();
+        HashSet<Short> iFaild = new HashSet<>();
         iFaild.add(me.getId());
         Set<Short> awareNodes = msg.getExpectedIds();
         SynchResult sr = synchFeature.get(sc.getKey());
