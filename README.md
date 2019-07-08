@@ -1,6 +1,6 @@
 # What is Clusterlet?
 
-Clusterlet is a `Java` library. It let you manage A to Z of a `cluster`
+Clusterlet is a `Java` library. It lets you manage A to Z of a `Cluster`
 
 * It helps you to discover other cluster members, add or remove members, detect dead or unhealthy members and so on.
 * It also helps you to communicate between cluster members with sending (bulk) messages.
