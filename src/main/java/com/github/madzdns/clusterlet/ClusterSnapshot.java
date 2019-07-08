@@ -97,7 +97,6 @@ public class ClusterSnapshot {
         inValidClusterIDs = null;
         aliveCluster = null;
         cluster = null;
-
     }
 
     public List<Member> getCluster() {

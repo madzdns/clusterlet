@@ -16,12 +16,12 @@ import com.github.madzdns.clusterlet.codec.SynchMessage.SynchMode;
 @Slf4j
 public class StartupManager {
 
-	private SynchContext synchContext = null;
+	private SynchContext synchContext;
 	StartupManager(SynchContext synchContext) {
 		this.synchContext = synchContext;
 	}
 	
-	boolean startClusterSynching() {
+	boolean startClusterSyncing() {
 		ClusterMessage msg = new ClusterMessage();
 		SynchHandler handler = new SynchHandler(synchContext, SynchType.UNICAST_ONE_OF)
 				.withCallBack(new ClusterSynchCallback(synchContext))
@@ -34,7 +34,7 @@ public class StartupManager {
 		}
 		
 		ClusterSnapshot snapshot = synchContext.getSnapshot();
-		List<IMessage> messages = new ArrayList<IMessage>();
+		List<IMessage> messages = new ArrayList<>();
 		for(Iterator<Member> it = snapshot.cluster.iterator(); it.hasNext();) {
 			Member node = it.next();
 			msg = new ClusterMessage(node.getId(),
@@ -51,7 +51,7 @@ public class StartupManager {
 				.withEncoder(null)
 				.withoutCluster(synchContext.myId);
 		handler.mode = SynchMode.SYNCH_CLUSTER;
-		feature = handler.synch(messages).get();
+		handler.synch(messages).get();
 		return !synchContext.inStartup;
 	}
 }

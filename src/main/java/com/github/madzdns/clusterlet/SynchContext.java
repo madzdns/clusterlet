@@ -5,14 +5,14 @@ import com.github.madzdns.clusterlet.codec.IMessage;
 import com.github.madzdns.clusterlet.codec.SynchMessage;
 import com.github.madzdns.clusterlet.codec.SynchMessage.SynchMode;
 import com.github.madzdns.clusterlet.config.SynchConfig;
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
+@Slf4j
 public class SynchContext {
-
-    private static Logger log = LoggerFactory.getLogger(SynchContext.class);
     private IClusterStore clusterStore;
     private IMessageStore messageStore;
     private SynchConfig config;
@@ -34,19 +34,20 @@ public class SynchContext {
     public SynchContext(short myId, SynchConfig config) throws Exception {
         this.myId = myId;
         this.config = config;
-			/*System.setProperty("net.sf.ehcache.enableShutdownHook","true");
-			clusterStore = new EhCacheClusterStore(config.getClusterStorageConfigPath());
-			messageStore = new EhCacheMessageStore(config.getClusterStorageConfigPath());*/
+        /*System.setProperty("net.sf.ehcache.enableShutdownHook","true");
+        clusterStore = new EhCacheClusterStore(config.getClusterStorageConfigPath());
+        messageStore = new EhCacheMessageStore(config.getClusterStorageConfigPath());*/
         clusterStore = new JcsCacheClusterStore(config.getClusterStorageConfigPath());
         messageStore = new JcsCacheMessageStore(config.getClusterStorageConfigPath());
-        Member node = getMemberById(myId);
-        if (node == null) {
-            final Set<Short> awareIds = new HashSet<Short>();
-            node = new Member(myId, null,
-                    true, true, "",
+        Member member = getMemberById(myId);
+        if (member == null) {
+            final Set<Short> awareIds = new HashSet<>();
+            member = new Member(myId, null,
+                    config.getTrustStorePath() != null &&
+                            config.getKeyStorePath() != null, true, "",
                     new Date().getTime(),
                     awareIds, Member.STATE_VLD);
-            updateMember(node);
+            updateMember(member);
         }
     }
 
@@ -88,26 +89,26 @@ public class SynchContext {
         return clusterStore.get(id);
     }
 
-    void updateMember(Member node) {
-        if (node == null) {
+    void updateMember(Member member) {
+        if (member == null) {
             return;
         }
-        node.addAwareId(myId);
+        member.addAwareId(myId);
         /*
          * Check if received edge is aware of himself (the target edge received this update before).
          * If not, we should use its previous key chain to inform him
          */
-        if (!node.getAwareIds().contains(node.getId())) {
-            Member e = null;
-            e = clusterStore.get(node.getId());
-            if (e != null) {
-                if (!e.getKey().equals(node.getKey())) {
-                    node.addKeyChain(e.getKeyChain());
+        if (!member.getAwareIds().contains(member.getId())) {
+            Member mem = null;
+            mem = clusterStore.get(member.getId());
+            if (mem != null) {
+                if (!mem.getKey().equals(member.getKey())) {
+                    member.addKeyChain(mem.getKeyChain());
                 }
             }
         }
         virtualLastModified = new Date().getTime();
-        clusterStore.update(node);
+        clusterStore.update(member);
         invalidateMonitor();
     }
 
@@ -235,7 +236,6 @@ public class SynchContext {
     }
 
     private void invalidateMonitor() {
-
         if (snapshot == null) {
             return;
         }

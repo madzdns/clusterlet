@@ -59,14 +59,14 @@ public class SynchServer {
         long lastModified = new Date().getTime();
 
         if (me.getSynchAddresses() == null) {
-            final Set<Short> awareIds = new HashSet<Short>();
+            final Set<Short> awareIds = new HashSet<>();
             awareIds.add(synchContext.myId);
             me.setSynchAddresses(myAddrzForSynch);
             me.setLastModified(lastModified);
             me.setAwareIds(awareIds);
             changed = true;
         } else if (!me.getSynchAddresses().equals(myAddrzForSynch)) {
-            final Set<Short> awareIds = new HashSet<Short>();
+            final Set<Short> awareIds = new HashSet<>();
             awareIds.add(synchContext.myId);
             me.setSynchAddresses(myAddrzForSynch);
             me.setLastModified(lastModified);
@@ -79,7 +79,7 @@ public class SynchServer {
         }
         socket.bind(addz);
         log.debug("Clusterlet is listning on {} ", addz);
-        new StartupManager(synchContext).startClusterSynching();
+        new StartupManager(synchContext).startClusterSyncing();
     }
 
     private static class NetHelper {
@@ -88,13 +88,11 @@ public class SynchServer {
             if (addresses != null) {
                 return addresses;
             }
-            addresses = new ArrayList<InetAddress>();
+            addresses = new ArrayList<>();
             Enumeration<NetworkInterface> nets = NetworkInterface.getNetworkInterfaces();
             for (NetworkInterface netint : Collections.list(nets)) {
                 Enumeration<InetAddress> inetAddresses = netint.getInetAddresses();
-                for (InetAddress inetAddress : Collections.list(inetAddresses)) {
-                    addresses.add(inetAddress);
-                }
+                addresses.addAll(Collections.list(inetAddresses));
             }
             if (addresses.size() == 0) {
                 addresses = null;
