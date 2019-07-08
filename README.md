@@ -74,7 +74,7 @@ public interface ISyncCallback {
 Clusterlet calls the `callBack` method for every receiving message
 and acts based on the return value. Updates its indexing database and informs the 
 sending member about the result. It is obvious that a value of `true` means ok and
-`false` mean failure. Following is the simplest `ISyncCallback` implementation ever!
+`false` means failure. Following is the simplest `ISyncCallback` implementation ever!
 
 ```java
 private static class SyncCallback implements ISyncCallback {
@@ -90,7 +90,7 @@ private static class SyncCallback implements ISyncCallback {
     }
 }
 ```
-`result` method will be called for a sender and informs the result the operation
+`result` method will be called for a sender and informs the result of the operation
 per each message. Here we are explaining about the server and will come to the sender
 part in a few seconds.
 
@@ -102,8 +102,9 @@ public interface IMessage extends IEncoder, IDecoder {
 	long getVersion();
 }
 ```
-For Every message `equals` and `hashCode` methods should be defined and make sure
+For Every message `equals` and `hashCode` methods should be override and make sure
 to have a default constructor with no arguments.
+Messages should also serialize and deserialize their own contents.
 Each message is identified with the `key` value. For messages with identical `key`
 values, version becomes important.
 
