@@ -84,7 +84,7 @@ public class SynchHandler extends IoHandlerAdapter {
         this.synch = synch;
         this.synchContext = ctx;
         this.me = ctx.getMyInfo();
-        unProperSockets = new HashSet<Integer>();
+        unProperSockets = new HashSet<>();
     }
 
     /**
@@ -580,12 +580,12 @@ public class SynchHandler extends IoHandlerAdapter {
                 }
             } else {
                 if (responses == null) {
-                    HashSet<Short> iFaild = new HashSet<Short>();
-                    iFaild.add(me.getId());
-                    log.debug("it was not synched successfully due to null responce and false result from callback");
+                    HashSet<Short> iFailed = new HashSet<>();
+                    iFailed.add(me.getId());
+                    log.debug("it was not synched successfully due to null response and false result from callback");
                     //means it was not synched successfully
                     responseContents.add(new SynchContent(sc.getKey(), 0,
-                            iFaild, null));
+                            iFailed, null));
                     continue;
                 }
                 for (IMessage response : responses) {
@@ -1201,16 +1201,16 @@ public class SynchHandler extends IoHandlerAdapter {
             short memberId = 0;
             if (isRing && expectedIds != null) {
                 expectedIds.addAll(awareNodes);
-                for (int i = 0; i < ids.length; i++) {
-                    memberId = ids[i];
+                for (short id : ids) {
+                    memberId = id;
                     if (expectedIds.contains(memberId)) {
                         r.removeFailedMember(memberId);
                         r.addSynchedMember(memberId);
                     }
                 }
             } else {
-                for (int i = 0; i < ids.length; i++) {
-                    memberId = ids[i];
+                for (short id : ids) {
+                    memberId = id;
                     if (awareNodes.contains(memberId)) {
                         r.removeFailedMember(memberId);
                         r.addSynchedMember(memberId);
@@ -1264,7 +1264,7 @@ public class SynchHandler extends IoHandlerAdapter {
             sr.removeSynchedMember(msg.getId());
         }
 
-        log.warn("Content {} faild", sc.getKey());
+        log.warn("Content {} failed", sc.getKey());
         faildContents.put(sc.getKey(), this.synchContents.get(sc.getKey()));
     }
 
@@ -1539,7 +1539,7 @@ public class SynchHandler extends IoHandlerAdapter {
                 } else {
                     if (synchingNodesLength == 0) {
                         s.setSuccessful(false);
-                    } else if (s.getSynchedMembers().size() > 0) {
+                    } else if (s.getSynchedMembers().size() > s.getFailedMembers().size()) {
                         s.setSuccessful(true);
                     } else if (synch == SynchType.UNICAST_ONE_OF
                             && s.getFailedMembers().size() > 0) {

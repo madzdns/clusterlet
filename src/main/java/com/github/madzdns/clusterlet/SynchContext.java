@@ -6,8 +6,6 @@ import com.github.madzdns.clusterlet.codec.SynchMessage;
 import com.github.madzdns.clusterlet.codec.SynchMessage.SynchMode;
 import com.github.madzdns.clusterlet.config.SynchConfig;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
