@@ -41,8 +41,7 @@ public class SynchHandler extends IoHandlerAdapter {
     public final static byte STATE_WORK_FAILED = 1;
     public final static byte STATE_UNPROPER = 2;
 
-    //private List<IMessage> msg ;
-    boolean starter = false;
+    boolean isSender;
     private SynchType synch;
     private ISynchCallbak callbak;
     private short[] ids = null;
@@ -75,13 +74,13 @@ public class SynchHandler extends IoHandlerAdapter {
     }
 
     SynchHandler(SynchContext ctx) {
-        this.starter = false;
+        this.isSender = false;
         this.synchContext = ctx;
         this.me = ctx.getMyInfo();
     }
 
     SynchHandler(SynchContext ctx, SynchType synch) {
-        this.starter = true;
+        this.isSender = true;
         this.synch = synch;
         this.synchContext = ctx;
         this.me = ctx.getMyInfo();
@@ -191,7 +190,7 @@ public class SynchHandler extends IoHandlerAdapter {
      * @return
      */
     public SynchHandler synch(List<IMessage> msg) {
-        this.starter = true;
+        this.isSender = true;
         if (msg == null || msg.size() == 0 ||
                 this.callbak == null || (mode == SynchMode.SYNCH_MESSAGE && this.encoder == null)) {
             log.warn("messages {}, callback {} encoder {}", msg, callbak, encoder);
@@ -359,7 +358,7 @@ public class SynchHandler extends IoHandlerAdapter {
 
     @Override
     public void sessionCreated(IoSession session) {
-        if (!starter) {
+        if (!isSender) {
             SSLContext ssl = NetProvider.getServerTLSContext(synchContext.getConfig().getKeyStorePath(),
                     synchContext.getConfig().getTrustStorePath(), synchContext.getConfig().getKeyStorePassword(),
                     synchContext.getConfig().getTrustStorePassword(), synchContext.getConfig().getKeyStorePassword2nd());
@@ -429,7 +428,7 @@ public class SynchHandler extends IoHandlerAdapter {
         }
     }
 
-    private boolean decodeGetCallbackResult(IoSession session, IMessage decoded, byte[] data, Set<Short> awareIds, SynchProtocolOutput out) {
+    private boolean decodeGetCallbackResult(ISynchCallbak callbak, IoSession session, IMessage decoded, byte[] data, Set<Short> awareIds, SynchProtocolOutput out) {
         if (data != null) {
             decoded.deserialize(data);
         }
@@ -484,9 +483,9 @@ public class SynchHandler extends IoHandlerAdapter {
         return true;
     }
 
-    private void handleMessageSync(IoSession session, SynchMessage msg, Member him,
-                                   Boolean startupStateFromSession,
-                                   Boolean isFirstMessage) throws IllegalAccessException, InstantiationException {
+    private void handleMessageSyncListener(IoSession session, SynchMessage msg, Member him,
+                                           Boolean startupStateFromSession,
+                                           Boolean isFirstMessage) throws IllegalAccessException, InstantiationException {
         /*
          * Here, we check if a communicating edge is valid in our
          * database. If not, don't synch our ZONEs with him.
@@ -500,19 +499,19 @@ public class SynchHandler extends IoHandlerAdapter {
          * If anybody send me a zone synch while I was not
          * valid anymore, should I communicate with him?
          */
-        boolean not_valid_node = false;
+        boolean notValidMember = false;
         short id = 0;
         if (him == null || !him.isValid()) {
-            not_valid_node = true;
+            notValidMember = true;
             if (him != null) {
                 id = him.getId();
             }
         }
 
-        if (not_valid_node) {
+        if (notValidMember) {
             log.error("Communicating edge {} is not valid in my database", id);
-            SynchMessage responce = createSimpleResponse(SynchMessage.TYPE_NOT_VALID_EDGE, startupStateFromSession, mode);
-            session.write(responce);
+            SynchMessage response = createSimpleResponse(SynchMessage.TYPE_NOT_VALID_EDGE, startupStateFromSession, mode);
+            session.write(response);
             session.close(false);
             return;
         }
@@ -538,7 +537,7 @@ public class SynchHandler extends IoHandlerAdapter {
         for (SynchContent sc : contents) {
             byte[] m = sc.getContent();
             if (m == null) {
-                //TODO should not check version and see if its is OK?
+                //TODO should not check version and see if its OK?
                 //It sounds no because I don't send null
                 log.warn("message was null for synching messages from {}", msg.getId());
                 continue;
@@ -546,7 +545,7 @@ public class SynchHandler extends IoHandlerAdapter {
 
             IMessage decoded = this.encoder.newInstance();
             SynchProtocolOutput out = new SynchProtocolOutput();
-            boolean result = decodeGetCallbackResult(session, decoded, m, sc.getAwareIds(), out);
+            boolean result = decodeGetCallbackResult(callbak, session, decoded, m, sc.getAwareIds(), out);
             List<IMessage> responses = out.getMessages();
             if (result) {
                 Set<Short> awareNodes = sc.getAwareIds();
@@ -567,10 +566,10 @@ public class SynchHandler extends IoHandlerAdapter {
                     log.debug("message for ring {} added", decoded.getKey());
                 } else {
                     if (responses == null) {
-								/* I decided to not send this sort of situation
-								 * responseContents.add(new SynchContent(sc.getKey(),
-										sc.getVersion(),
-										awareNodes, null));*/
+                        /* I decided to not send this sort of situation
+                         * responseContents.add(new SynchContent(sc.getKey(),
+                                sc.getVersion(),
+                                awareNodes, null));*/
                         continue;
                     }
                     for (IMessage response : responses) {
@@ -625,7 +624,7 @@ public class SynchHandler extends IoHandlerAdapter {
                 if (s.isSuccessful()) {
                     SynchProtocolOutput out = new SynchProtocolOutput();
                     Set<Short> awareIds = synchContext.getAwareNodes(m.getKey(), m.getVersion());
-                    boolean result = decodeGetCallbackResult(session, m, null, awareIds, out);
+                    boolean result = decodeGetCallbackResult(callbak, session, m, null, awareIds, out);
                     List<IMessage> responses = out.getMessages();
                     if (!fillCallbackResult(result, m, responseContents, responses, ringMsgToScMap, awareIds, s)) {
                         continue;
@@ -670,7 +669,7 @@ public class SynchHandler extends IoHandlerAdapter {
         session.write(m);
     }
 
-    private void handleClusterSync(IoSession session, SynchMessage msg, Boolean isFirstMessage) {
+    private void handleClusterSyncListener(IoSession session, SynchMessage msg, Boolean isFirstMessage) {
         /*
          * First of all we remove startup flag
          */
@@ -695,12 +694,11 @@ public class SynchHandler extends IoHandlerAdapter {
             byte[] m = sc.getContent();
             if (m == null) {
                 if (sc.getVersion() > 0) {
-                    Member node = null;
                     try {
-                        node = synchContext.getMemberById(Short.parseShort(sc.getKey()));
-                        if (node != null) {
-                            node.addAwareId(me.getId());
-                            node.addAwareId(msg.getId());
+                        Member member = synchContext.getMemberById(Short.parseShort(sc.getKey()));
+                        if (member != null) {
+                            member.addAwareId(me.getId());
+                            member.addAwareId(msg.getId());
                         } else {
                             log.error("Wired state!!!!");
                         }
@@ -715,7 +713,7 @@ public class SynchHandler extends IoHandlerAdapter {
 
             IMessage decoded = new ClusterMessage();
             SynchProtocolOutput out = new SynchProtocolOutput();
-            boolean result = decodeGetCallbackResult(session, decoded, m, sc.getAwareIds(), out);
+            boolean result = decodeGetCallbackResult(clusterCallback, session, decoded, m, sc.getAwareIds(), out);
             List<IMessage> responses = out.getMessages();
             if (result) {
                 if (isRing) {
@@ -769,7 +767,7 @@ public class SynchHandler extends IoHandlerAdapter {
                     if (member != null) {
                         awareIds = member.getAwareIds();
                     }
-                    boolean result = decodeGetCallbackResult(session, m, null, awareIds, out);
+                    boolean result = decodeGetCallbackResult(clusterCallback, session, m, null, awareIds, out);
                     List<IMessage> responses = out.getMessages();
                     fillCallbackResult(result, m, responseContents, responses, ringMsgToScMap, awareIds, s);
                     for (IMessage response : responses) {
@@ -813,7 +811,7 @@ public class SynchHandler extends IoHandlerAdapter {
         }
     }
 
-    private void handleNoneStarter(IoSession session, SynchMessage msg, String peer) throws IllegalAccessException, InstantiationException {
+    private void handleListener(IoSession session, SynchMessage msg, String peer) throws IllegalAccessException, InstantiationException {
         Boolean startupStateFromSession = (Boolean) session.getAttribute("startupstate");
         if (msg.getType() == SynchMessage.TYPE_OK) {
             log.debug("Returned type OK");
@@ -878,13 +876,13 @@ public class SynchHandler extends IoHandlerAdapter {
         }
 
         if (msg.getSynchMode() == SynchMode.SYNCH_MESSAGE) {
-            handleMessageSync(session, msg, him, startupStateFromSession, isFirstMessage);
+            handleMessageSyncListener(session, msg, him, startupStateFromSession, isFirstMessage);
         } else if (msg.getSynchMode() == SynchMode.SYNCH_CLUSTER) {
-            handleClusterSync(session, msg, isFirstMessage);
+            handleClusterSyncListener(session, msg, isFirstMessage);
         }
     }
 
-    private void handleStarter(IoSession session, SynchMessage msg, String peer) throws IllegalAccessException, InstantiationException {
+    private void handleSender(IoSession session, SynchMessage msg, String peer) throws IllegalAccessException, InstantiationException {
         SynchSession synch = (SynchSession) session.getAttribute("SynchSession");
         boolean isRing = SynchType.checkIfRingType(this.synch);
         if (isRing) {
@@ -961,7 +959,7 @@ public class SynchHandler extends IoHandlerAdapter {
             }
 
             Set<SynchContent> responseContents = new HashSet<>();
-            Map<String, SynchContent> faildContents = new HashMap<>();
+            Map<String, SynchContent> failedContents = new HashMap<>();
             int numberOfNull = 0;
 
             for (SynchContent sc : contents) {
@@ -983,18 +981,18 @@ public class SynchHandler extends IoHandlerAdapter {
                         continue;
                     }
 
-                    handleNullDataOfStarterHandler(msg, isRing, faildContents, sc, awareMembers, sr);
+                    handleNullDataOfStarterHandler(msg, isRing, failedContents, sc, awareMembers, sr);
                     continue;
                 }
 
                 IMessage decoder = this.encoder.newInstance();
                 SynchProtocolOutput out = new SynchProtocolOutput();
-                boolean result = decodeGetCallbackResult(session, decoder, m, sc.getAwareIds(), out);
+                boolean result = decodeGetCallbackResult(callbak, session, decoder, m, sc.getAwareIds(), out);
                 List<IMessage> responses = out.getMessages();
 
                 if (!result) {
                     if (isRing) {
-                        faildContents.put(sc.getKey(), this.synchContents.get(sc.getKey()));
+                        failedContents.put(sc.getKey(), this.synchContents.get(sc.getKey()));
                     }
                     if (responses != null) {
                         for (IMessage response : responses) {
@@ -1042,7 +1040,7 @@ public class SynchHandler extends IoHandlerAdapter {
                 }
             }
 
-            if (checkAndPrepareFailedResult(session, isRing, responseContents, faildContents, numberOfNull)) {
+            if (checkAndPrepareFailedResult(session, isRing, responseContents, failedContents, numberOfNull)) {
                 return;
             }
 
@@ -1082,21 +1080,20 @@ public class SynchHandler extends IoHandlerAdapter {
                 if (m == null) {
                     Set<Short> awareNodes = sc.getAwareIds();
                     if (awareNodes == null) {
-                        awareNodes = new HashSet<Short>();
+                        awareNodes = new HashSet<>();
                     }
                     awareNodes.add(msg.getId());
 
                     if (sc.getVersion() > 0) {
                         SynchResult sr = synchFeature.get(sc.getKey());
                         fillSyncResultForVersionBiggerThan0(msg, isRing, awareNodes, sr);
-                        Member node = null;
                         try {
-                            node = synchContext.getMemberById(Short.parseShort(sc.getKey()));
-                            if (node != null) {
+                            Member member = synchContext.getMemberById(Short.parseShort(sc.getKey()));
+                            if (member != null) {
                                 awareNodes.add(me.getId());
-                                node.addAwareId(awareNodes);
+                                member.addAwareId(awareNodes);
                             } else {
-                                log.warn("how come node is null!!!");
+                                log.warn("how come member {} is null!!!", sc.getKey());
                             }
                         } catch (Exception e) {
                             log.error("Error in parsing {}", sc.getKey(), e);
@@ -1109,7 +1106,7 @@ public class SynchHandler extends IoHandlerAdapter {
 
                 ClusterMessage decoded = new ClusterMessage();
                 SynchProtocolOutput out = new SynchProtocolOutput();
-                boolean result = decodeGetCallbackResult(session, decoded, m, sc.getAwareIds(), out);
+                boolean result = decodeGetCallbackResult(clusterCallback, session, decoded, m, sc.getAwareIds(), out);
                 List<IMessage> responses = out.getMessages();
 
                 if (!result) {
@@ -1185,9 +1182,9 @@ public class SynchHandler extends IoHandlerAdapter {
             }
         }
 
-        int responcesSize = responseContents.size();
-        log.debug("responcesSize = {}, numberOfNull = {}", responcesSize, numberOfNull);
-        if (responcesSize == 0 || numberOfNull == responcesSize) {
+        int responsesSize = responseContents.size();
+        log.debug("responsesSize = {}, numberOfNull = {}", responsesSize, numberOfNull);
+        if (responsesSize == 0 || numberOfNull == responsesSize) {
             numberOfTrieds++;
             createResult();
             session.setAttribute("planned_close");
@@ -1237,12 +1234,10 @@ public class SynchHandler extends IoHandlerAdapter {
         Set<Short> awareNodes = msg.getExpectedIds();
         SynchResult sr = synchFeature.get(sc.getKey());
         if (isRing && awareNodes != null) {
-            short nodeId = 0;
-            for (int i = 0; i < ids.length; i++) {
-                nodeId = ids[i];
-                if (awareNodes.contains(nodeId)) {
-                    sr.addFailedMember(nodeId);
-                    sr.removeSynchedMember(nodeId);
+            for (short id : ids) {
+                if (awareNodes.contains(id)) {
+                    sr.addFailedMember(id);
+                    sr.removeSynchedMember(id);
                 }
             }
         } else {
@@ -1258,33 +1253,27 @@ public class SynchHandler extends IoHandlerAdapter {
 
     private void handleNullDataOfStarterHandler(SynchMessage msg, boolean isRing, Map<String, SynchContent> faildContents, SynchContent sc, Set<Short> awareMembers, SynchResult sr) {
         if (isRing) {
-            short nodeId = 0;
-            for (int i = 0; i < ids.length; i++) {
-                nodeId = ids[i];
-                if (awareMembers.contains(nodeId)) {
-                    sr.addFailedMember(nodeId);
-                    sr.removeSynchedMember(nodeId);
+            for (short id : ids) {
+                if (awareMembers.contains(id)) {
+                    sr.addFailedMember(id);
+                    sr.removeSynchedMember(id);
                 }
             }
         } else {
-
             sr.addFailedMember(msg.getId());
             sr.removeSynchedMember(msg.getId());
         }
 
         log.warn("Content {} faild", sc.getKey());
         faildContents.put(sc.getKey(), this.synchContents.get(sc.getKey()));
-        return;
     }
 
     private void fillSyncResultForVersionBiggerThan0(SynchMessage msg, boolean isRing, Set<Short> awareNodes, SynchResult sr) {
         if (isRing) {
-            short nodeId = 0;
-            for (int i = 0; i < ids.length; i++) {
-                nodeId = ids[i];
-                if (awareNodes.contains(nodeId)) {
-                    sr.addSynchedMember(nodeId);
-                    sr.removeFailedMember(nodeId);
+            for (short id : ids) {
+                if (awareNodes.contains(id)) {
+                    sr.addSynchedMember(id);
+                    sr.removeFailedMember(id);
                 }
             }
         } else {
@@ -1333,16 +1322,15 @@ public class SynchHandler extends IoHandlerAdapter {
 				return;
 			}
 		}*/
-        if (!starter) {
-            handleNoneStarter(session, msg, peer);
+        if (!isSender) {
+            handleListener(session, msg, peer);
         } else {
-            handleStarter(session, msg, peer);
+            handleSender(session, msg, peer);
         }
     }
 
     @Override
-    public void exceptionCaught(IoSession session, Throwable cause)
-            throws Exception {
+    public void exceptionCaught(IoSession session, Throwable cause) {
 
         if (cause instanceof IOException) {
             log.error("{} by {}", cause.getMessage(), ((InetSocketAddress) session.getRemoteAddress())
@@ -1352,21 +1340,17 @@ public class SynchHandler extends IoHandlerAdapter {
             log.error("", cause);
         }
 
-        if (starter) {
+        if (isSender) {
             InetSocketAddress peer = ((InetSocketAddress) session.getRemoteAddress());
-            String link =
-                    new StringBuilder(peer.getAddress()
-                            .getHostAddress())
-                            .append(":")
-                            .append(peer.getPort()).toString();
+            String link = peer.getAddress().getHostAddress() + ":" + peer.getPort();
             SynchSession sync = (SynchSession) session.getAttribute("SynchSession");
             workCallback(sync, STATE_WORK_FAILED, link);
         }
     }
 
     @Override
-    public void sessionClosed(IoSession session) throws Exception {
-        if (starter && !session.containsAttribute("planned_close")) {
+    public void sessionClosed(IoSession session) {
+        if (isSender && !session.containsAttribute("planned_close")) {
             SynchSession synch = (SynchSession) session.getAttribute("SynchSession");
             log.debug("Session unexpectly closed. Starting close worker");
             workCallback(synch, STATE_UNPROPER, link);
@@ -1393,14 +1377,14 @@ public class SynchHandler extends IoHandlerAdapter {
                         synchContext.synchronizedStateChange(e, Member.STATE_DWN);
                         unProperSockets.add(currentSocket);
                         if (synch != SynchType.UNICAST_ONE_OF) {
-                            this.expectedNodes.remove(session.getFrNodeId());
+                            this.expectedNodes.remove(session.getMemberId());
                         }
                     }
                 }
 
                 if (state == STATE_WORK_FAILED) {
                     log.error("Last synch failed with edge {} due to failure of link {}. Trying other links"
-                            , session.getFrNodeId(), link_ip);
+                            , session.getMemberId(), link_ip);
                     try {
                         session.setupNextSocket();
                     } catch (Exception e1) {
@@ -1409,106 +1393,27 @@ public class SynchHandler extends IoHandlerAdapter {
 
                     if (session.isAllTried()) {
                         if (synch != SynchType.UNICAST_ONE_OF) {
-                            this.expectedNodes.remove(session.getFrNodeId());
+                            this.expectedNodes.remove(session.getMemberId());
                         }
                         numberOfTrieds++;
                         addFaildNodeToSynchFeatures(session.getMember().getId());
                     }
-
-                    int last_socket = currentSocket;
-                    currentSocket = (++currentSocket) % sessions.size();
-                    log.warn("Using {}nd link of {} links", currentSocket, sessions.size());
-                    while (sessions
-                            .get(currentSocket)
-                            .isAllTried()
-                            || unProperSockets
-                            .contains(currentSocket)
-                            || (synch != SynchType.UNICAST_ONE_OF &&
-                            !this.expectedNodes.contains(sessions
-                                    .get(currentSocket).getFrNodeId()))) {
-
-                        if (currentSocket == last_socket) {
-                            log.error("All linkes tried with no success. Synchnig failed");
-                            //TODO I commented this in 14 APR 16
-                            //synchContext.inStartup = false;
-
-                            /*callbak.result(ids, false);*/
-                            sessions = null;
-                            /*
-                             * In zone synchronizing, lastModified is always 0
-                             * so this is safe to call
-                             */
-                            fixMonitorLastModified();
-                            createResult();
-                            return;
-                        }
-
-                        currentSocket = (++currentSocket) % sessions.size();
-                    }
-
-                    SynchMessage message = new SynchMessage();
-                    message.setId(me.getId());
-                    message.setInStartup(startupState);
-                    message.setSynchMode(mode);
-                    message.setSynchType(this.synch);
-                    message.setType(SynchMessage.TYPE_CHECK);
-                    message.setContents(this.synchContents.values());
-
-                    sessions.get(currentSocket)
-                            .sendMsg(message);
-
+                    failureOrUnproperSocketWorkAround();
                     return;
                 } else if (state == STATE_UNPROPER) {
-                    synchronized (session.unproperMutx) {
-                        if (session.isUnproper()) {
+                    synchronized (session.improperMutex) {
+                        if (session.isImproper()) {
                             return;
                         }
-                        session.setUnproper(true);
-                        log.error("Last synch failed, due to struggle (or other hard errors) with edge {}. Trying other links", session.getFrNodeId());
+                        session.setImproper(true);
+                        log.error("Last synch failed, due to struggle (or other hard errors) with edge {}. Trying other links", session.getMemberId());
                         unProperSockets.add(currentSocket);
                         if (synch != SynchType.UNICAST_ONE_OF) {
-                            this.expectedNodes.remove(session.getFrNodeId());
+                            this.expectedNodes.remove(session.getMemberId());
                         }
                         numberOfTrieds++;
                         addFaildNodeToSynchFeatures(session.getMember().getId());
-                        int last_socket = currentSocket;
-                        currentSocket = (++currentSocket) % sessions.size();
-                        while (sessions
-                                .get(currentSocket)
-                                .isAllTried()
-                                || unProperSockets
-                                .contains(currentSocket)
-                                || (synch != SynchType.UNICAST_ONE_OF &&
-                                !this.expectedNodes.contains(sessions
-                                        .get(currentSocket).getFrNodeId()))) {
-                            if (currentSocket == last_socket) {
-                                log.error("All linkes tried with no success. Synchnig failed");
-                                //TODO I commented this in 14 APR 16
-                                //synchContext.inStartup = false;
-
-                                /*callbak.result(ids, false);*/
-                                sessions = null;
-                                /*
-                                 * In zone synchronizing, lastModified is always 0
-                                 * so this is safe to call
-                                 */
-                                fixMonitorLastModified();
-                                createResult();
-                                return;
-                            }
-                            currentSocket = (++currentSocket) % sessions.size();
-                        }
-
-                        SynchMessage message = new SynchMessage();
-                        message.setId(me.getId());
-                        message.setInStartup(startupState);
-                        message.setSynchMode(mode);
-                        message.setSynchType(this.synch);
-                        message.setType(SynchMessage.TYPE_CHECK);
-                        message.setContents(this.synchContents.values());
-
-                        sessions.get(currentSocket)
-                                .sendMsg(message);
+                        failureOrUnproperSocketWorkAround();
                         return;
                     }
                 }
@@ -1533,16 +1438,13 @@ public class SynchHandler extends IoHandlerAdapter {
 
                 if (state == STATE_WORK_FAILED) {
                     log.error("Last synch failed with edge {} due to failure of link {}. Trying other links"
-                            , session.getFrNodeId(), link_ip);
+                            , session.getMemberId(), link_ip);
                     try {
                         session.setupNextSocket();
                         if (!session.isAllTried()) {
-                            SynchMessage message = new SynchMessage();
-                            message.setId(me.getId());
-                            message.setInStartup(startupState);
-                            message.setSynchMode(mode);
-                            message.setSynchType(this.synch);
-                            message.setType(SynchMessage.TYPE_CHECK);
+                            SynchMessage message = createCompleteResponse(
+                                    SynchMessage.TYPE_CHECK,
+                                    startupState, mode, synch, (byte) -1);
                             message.setContents(this.synchContents.values());
                             session.sendMsg(message);
                             return;
@@ -1554,13 +1456,13 @@ public class SynchHandler extends IoHandlerAdapter {
                         log.error("", e1);
                     }
                 } else if (state == STATE_UNPROPER) {
-                    log.error("Last synch failed, due to struggle (or othere other hard errors) with edge {}. Trying other links", session.getFrNodeId());
+                    log.error("Last synch failed, due to struggle (or othere other hard errors) with edge {}. Trying other links", session.getMemberId());
                     try {
-                        synchronized (session.unproperMutx) {
-                            if (session.isUnproper()) {
+                        synchronized (session.improperMutex) {
+                            if (session.isImproper()) {
                                 return;
                             }
-                            session.setUnproper(true);
+                            session.setImproper(true);
                             numberOfTrieds++;
                             addFaildNodeToSynchFeatures(session.getMember().getId());
                         }
@@ -1573,6 +1475,42 @@ public class SynchHandler extends IoHandlerAdapter {
                 break;
         }
         createResult();
+    }
+
+    private void failureOrUnproperSocketWorkAround() {
+        int last_socket = currentSocket;
+        currentSocket = (++currentSocket) % sessions.size();
+        while (sessions
+                .get(currentSocket)
+                .isAllTried()
+                || unProperSockets
+                .contains(currentSocket)
+                || (synch != SynchType.UNICAST_ONE_OF &&
+                !this.expectedNodes.contains(sessions
+                        .get(currentSocket).getMemberId()))) {
+            if (currentSocket == last_socket) {
+                log.error("All linkes tried with no success. Synchnig failed");
+                //TODO I commented this in 14 APR 16
+                //synchContext.inStartup = false;
+
+                /*callbak.result(ids, false);*/
+                sessions = null;
+                /*
+                 * In zone synchronizing, lastModified is always 0
+                 * so this is safe to call
+                 */
+                fixMonitorLastModified();
+                createResult();
+                return;
+            }
+            currentSocket = (++currentSocket) % sessions.size();
+        }
+        SynchMessage message = createCompleteResponse(
+                SynchMessage.TYPE_CHECK,
+                startupState, mode, synch, (byte) -1);
+        message.setContents(this.synchContents.values());
+        sessions.get(currentSocket)
+                .sendMsg(message);
     }
 
     private void createResult() {
@@ -1637,7 +1575,7 @@ public class SynchHandler extends IoHandlerAdapter {
                     || unProperSockets
                     .contains(currentSocket)
                     || !this.expectedNodes.contains(sessions
-                    .get(currentSocket).getFrNodeId())) {
+                    .get(currentSocket).getMemberId())) {
 
                 if (currentSocket == last_socket) {
                     log.error("All linkes tried with no success. Synchnig failed");
@@ -1676,7 +1614,7 @@ public class SynchHandler extends IoHandlerAdapter {
     }
 
     private void synchWithBalance(List<IMessage> msg) {
-        this.starter = true;
+        this.isSender = true;
         ClusterSnapshot snapshot = synchContext.getSnapshot();
         if (snapshot == null) {
             nonasyncLock = null;

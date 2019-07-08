@@ -23,6 +23,7 @@ class SynchSession {
     class MinaConnectListener implements IoFutureListener<ConnectFuture> {
         private String link = "";
         private SynchMessage msg;
+
         public MinaConnectListener(SynchMessage msg) {
             this.msg = msg;
         }
@@ -32,7 +33,7 @@ class SynchSession {
             Throwable e = connection.getException();
             if (e != null) {
                 if (e instanceof ConnectException) {
-                    log.error("{} to member {}", e.getMessage(), SynchSession.this.getFrNodeId());
+                    log.error("{} to member {}", e.getMessage(), SynchSession.this.getMemberId());
                 } else {
                     log.error("", e);
                 }
@@ -55,26 +56,17 @@ class SynchSession {
         public void setLink(String remote, int port) {
             this.link = remote + ":" + port;
         }
-
     }
 
     private int currentSocket = 0;
-
     private int lastSocket = 0;
-
-    private List<ClusterAddress> sockets = null;
-
+    private List<ClusterAddress> sockets;
     private Object mutx = new Object();
-
     private SynchHandler handler;
-
-    private Member member = null;
-
+    private Member member;
     private boolean allTried = false;
-
-    private boolean unproper = false;
-
-    Object unproperMutx = new Object();
+    private boolean improper = false;
+    final Object improperMutex = new Object();
 
     public SynchSession(Member member, SynchHandler handler) {
         this.sockets = new ArrayList<>(member.getSynchAddresses());
@@ -105,60 +97,43 @@ class SynchSession {
         }
     }
 
-    public List<ClusterAddress> getSokets() {
-
+    public List<ClusterAddress> getSockets() {
         return sockets;
     }
 
-    public void setSokets(List<ClusterAddress> sockets) {
-
+    public void setSockets(List<ClusterAddress> sockets) {
         this.sockets = sockets;
     }
 
     public void sendMsg(SynchMessage msg) {
-
         synchronized (mutx) {
-
             if (currentSocket > -1
                     && handler != null) {
-
                 ClusterAddress currentEdgeSocketAddr = sockets.get(currentSocket);
-
                 SynchSocket socket =
                         new SynchSocket(currentEdgeSocketAddr.getAddress().getHostAddress(),
                                 currentEdgeSocketAddr.getPort());
-
                 socket.setHandler(handler);
-
                 if (!member.isAuthByKey()) {
-
-                    log.warn("no need to authenticate by key for member {}", getFrNodeId());
+                    log.warn("no need to authenticate by key for member {}", getMemberId());
                     msg.setKeyChain(null);
                 } else {
-
                     msg.setKeyChain(member.getKeyChain());
                 }
 
                 if (member.isUseSsl()) {
-
                     String cer = handler.synchContext.getConfig().getCertificatePath();
                     SSLContext ssl = null;
-
                     if (cer == null) {
-
                         ssl = NetProvider.getClientSslContext();
                         log.warn("Could not find any certificate file. Using SSL without verification enable");
                     } else {
-
                         ssl = NetProvider.getClientSslContext(cer);
                     }
 
                     if (ssl != null) {
-
                         SslFilter sslFilter = new SslFilter(ssl);
-
                         sslFilter.setUseClientMode(true);
-
                         socket.setFilter("ssl_filter", sslFilter);
                     }
                 }
@@ -169,11 +144,8 @@ class SynchSession {
                 socket.setFilter("synchsocket_codec",
                         new SynchMinaEncoder(),
                         new SynchMinaDecoder());
-
                 try {
-
                     socket.connect(this.new MinaConnectListener(msg));
-
                 } catch (Exception e) {
                     log.error("", e);
                     handler.workCallback(this, SynchHandler.STATE_WORK_FAILED,
@@ -188,22 +160,20 @@ class SynchSession {
     public SynchHandler getHandler() {
         return handler;
     }
-
     public void setHandler(SynchHandler handler) {
         this.handler = handler;
     }
-
     public boolean isAllTried() {
         return allTried || currentSocket < 0;
     }
-
     public void setAllTried(boolean allTried) {
         this.allTried = allTried;
     }
 
-    public short getFrNodeId() {
-        if (member == null){
-            return 0;}
+    public short getMemberId() {
+        if (member == null) {
+            return 0;
+        }
         return member.getId();
     }
 
@@ -211,19 +181,16 @@ class SynchSession {
         return member;
     }
 
-    public boolean isUnproper() {
-
-        return unproper;
+    public boolean isImproper() {
+        return improper;
     }
 
-    public void setUnproper(boolean unproper) {
-
-        this.unproper = unproper;
+    public void setImproper(boolean improper) {
+        this.improper = improper;
     }
 
     @Override
     public String toString() {
-
-        return String.valueOf(getFrNodeId());
+        return String.valueOf(getMemberId());
     }
 }

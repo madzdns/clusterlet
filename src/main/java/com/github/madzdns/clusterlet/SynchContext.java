@@ -144,7 +144,7 @@ public class SynchContext {
                 .withoutCluster(myId)
                 .withCallBack(new ClusterSynchCallback(this));
         handler.mode = SynchMode.SYNCH_CLUSTER;
-        final List<IMessage> messages = new ArrayList<IMessage>();
+        final List<IMessage> messages = new ArrayList<>();
         ClusterSnapshot snapshot = getSnapshot();
         if (snapshot != null) {
             for (Member n : snapshot.cluster) {

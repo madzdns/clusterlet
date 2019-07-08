@@ -1,6 +1,7 @@
 package com.github.madzdns.clusterlet.codec;
 
 import com.github.madzdns.clusterlet.Member.ClusterAddress;
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,30 +14,21 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+@Slf4j
 public class ClusterMessage implements IMessage {
-
-    private static Logger log = LoggerFactory.getLogger(ClusterMessage.class);
-
     private short id = -1;
-
     private boolean useSsl = true;
-
     private boolean authByKey = true;
-
     private String credentionalKey = "";
-
     private long version = 0;
     private Set<ClusterAddress> synchAddresses = null;
     private byte command = 0;
 
     public ClusterMessage() {
-
     }
 
-    public ClusterMessage(short id, boolean useSsl, boolean authByKey,
-                          String key, long version, Set<ClusterAddress> synchAddresses,
-                          byte command) {
-
+    public ClusterMessage(short id, boolean useSsl, boolean authByKey, String key,
+                          long version, Set<ClusterAddress> synchAddresses, byte command) {
         this.id = id;
         this.useSsl = useSsl;
         this.authByKey = authByKey;
@@ -47,42 +39,34 @@ public class ClusterMessage implements IMessage {
     }
 
     public short getId() {
-
         return id;
     }
 
     public void setId(short id) {
-
         this.id = id;
     }
 
     public boolean isUseSsl() {
-
         return useSsl;
     }
 
     public void setUseSsl(boolean useSsl) {
-
         this.useSsl = useSsl;
     }
 
     public boolean isAuthByKey() {
-
         return authByKey;
     }
 
     public void setAuthByKey(boolean authByKey) {
-
         this.authByKey = authByKey;
     }
 
     public void setCredentionalKey(String key) {
-
         this.credentionalKey = key;
     }
 
     public String getCredentionalKey() {
-
         return this.credentionalKey;
     }
 
@@ -165,8 +149,10 @@ public class ClusterMessage implements IMessage {
                         in.read(ip);
                     }
                     port = in.readInt();
-                    ClusterAddress ca = new ClusterAddress(InetAddress.getByAddress(ip), port);
-                    synchAddresses.add(ca);
+                    if (ip != null) {
+                        ClusterAddress ca = new ClusterAddress(InetAddress.getByAddress(ip), port);
+                        synchAddresses.add(ca);
+                    }
                 }
             }
         } catch (Exception e) {

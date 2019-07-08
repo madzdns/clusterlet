@@ -19,7 +19,7 @@ public class SynchServer {
     public SynchServer(SynchHandler handler, Bind synchBindings) {
         this.synchBindings = Objects.requireNonNull(synchBindings);
         this.handler = Objects.requireNonNull(handler);
-        if (handler.starter) {
+        if (handler.isSender) {
             throw new IllegalStateException("SynchHandler should be of type server");
         }
         this.synchContext = Objects.requireNonNull(handler.synchContext);
